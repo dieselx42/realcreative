@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import { ResultsView } from "@/components/ResultsView";
-import { generateScanResult } from "@/lib/scoring/engine";
 import { getScanRequest } from "@/lib/store";
 
 interface ResultsPageProps {
@@ -23,10 +22,8 @@ export default async function ResultsPage({
     notFound();
   }
 
-  // MVP: scoring is deterministic and computed on the fly. Once real scans run
-  // as background jobs, read the persisted scan_results row here instead and
-  // show a "still processing" state while status !== "completed".
-  const result = generateScanResult(params.id, websiteUrl);
-
-  return <ResultsView websiteUrl={websiteUrl} result={result} />;
+  // The score is fetched client-side from /api/scan/[id] so the (potentially
+  // slow) PageSpeed call runs behind the scan animation instead of blocking
+  // this render.
+  return <ResultsView scanId={params.id} websiteUrl={websiteUrl} />;
 }

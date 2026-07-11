@@ -1,39 +1,22 @@
-import type { CategoryKey } from "@/lib/scoring/categories";
+import "server-only";
+
+import { performanceScanner } from "@/lib/scanner/performance";
+import type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
+
+export type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
+export { runPerformanceScan } from "@/lib/scanner/performance";
 
 /**
  * Modular scanner services.
  *
- * Each scanner is responsible for gathering raw signals for one or more score
- * categories and returning a normalized 0..1 value per category it covers. The
- * scoring engine multiplies these by each category's `maxPoints`.
+ * Each scanner gathers raw signals for one or more score categories and returns
+ * a normalized 0..1 value per category it covers. The scoring engine multiplies
+ * these by each category's `maxPoints`; categories with no signal fall back to
+ * deterministic placeholder scoring.
  *
- * For the MVP these are stubs that return `null` (meaning "no signal yet"), and
- * the engine falls back to deterministic placeholder scoring. The interfaces
- * below define the contract the real implementations should honor.
+ * `performanceScanner` is the first real implementation (Google PageSpeed). The
+ * rest are still stubs returning `{}`.
  */
-
-export interface ScanContext {
-  websiteUrl: string;
-  city: string;
-  onlineOrderingProvider: string | null;
-}
-
-/** A scanner's contribution: a 0..1 signal per category it can assess. */
-export type ScannerSignals = Partial<Record<CategoryKey, number>>;
-
-export interface Scanner {
-  name: string;
-  run(context: ScanContext): Promise<ScannerSignals>;
-}
-
-// TODO: Website Performance scanner — call Google PageSpeed Insights API and
-//   map Core Web Vitals to a 0..1 signal for `website_performance`.
-export const performanceScanner: Scanner = {
-  name: "performance",
-  async run() {
-    return {};
-  },
-};
 
 // TODO: Crawl scanner — use Playwright/Cheerio to crawl the homepage and menu,
 //   detecting order buttons, contact capture, schema markup, and content depth
@@ -72,17 +55,23 @@ export const SCANNERS: readonly Scanner[] = [
 ];
 
 /**
- * Run every scanner and merge their signals into a single map.
+ * Run every scanner and merge their signals into a single map. A scanner that
+ * throws is treated as "no signal" so one failing service never breaks a scan.
  *
  * TODO: Move this into a Trigger.dev background job so scans run asynchronously
- *   and the results page can poll for completion instead of blocking the
- *   request. For now it is unused by the MVP flow (scoring is deterministic).
+ *   and the results page polls for completion, rather than running inline in
+ *   the /api/scan request.
  */
 export async function runScanners(
   context: ScanContext,
 ): Promise<ScannerSignals> {
   const results = await Promise.all(
-    SCANNERS.map((scanner) => scanner.run(context)),
+    SCANNERS.map((scanner) =>
+      scanner.run(context).catch((error) => {
+        console.error(`Scanner "${scanner.name}" failed`, error);
+        return {} as ScannerSignals;
+      }),
+    ),
   );
 
   return results.reduce<ScannerSignals>(
