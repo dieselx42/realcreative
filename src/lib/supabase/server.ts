@@ -3,6 +3,21 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
+ * Resolve the Supabase project URL, tolerating the different names used by
+ * various setups: our own `.env.example` uses NEXT_PUBLIC_SUPABASE_URL, while
+ * Vercel's Supabase integration also provisions a bare SUPABASE_URL. Accepting
+ * either means the app switches on whichever the integration created, instead
+ * of silently staying in the no-database fallback.
+ */
+function resolveSupabaseUrl(): string | undefined {
+  return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+}
+
+function resolveServiceRoleKey(): string | undefined {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY;
+}
+
+/**
  * Server-only Supabase client using the service role key. This bypasses Row
  * Level Security, so it must NEVER be imported into a client component.
  *
@@ -10,13 +25,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * requests on behalf of anonymous visitors.
  */
 export function createServiceSupabaseClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = resolveSupabaseUrl();
+  const serviceRoleKey = resolveServiceRoleKey();
 
   if (!url || !serviceRoleKey) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. " +
-        "Copy .env.example to .env.local and fill in your Supabase keys.",
+      "Missing Supabase URL (NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL) or " +
+        "SUPABASE_SERVICE_ROLE_KEY. Copy .env.example to .env.local and fill " +
+        "in your Supabase keys, or connect the Supabase integration in Vercel.",
     );
   }
 
@@ -29,13 +45,10 @@ export function createServiceSupabaseClient(): SupabaseClient {
 }
 
 /**
- * True when Supabase env vars are configured. The MVP falls back to an
- * in-memory store when this is false so the app is runnable without a
- * database (e.g. a first local `npm run dev` before Supabase is set up).
+ * True when Supabase env vars are configured. When false, the store falls back
+ * to a no-database JSON file so the app is runnable without Supabase (e.g. a
+ * first local `npm run dev`, or a demo deploy before the database is wired up).
  */
 export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
+  return Boolean(resolveSupabaseUrl() && resolveServiceRoleKey());
 }
