@@ -6,8 +6,8 @@ import { ScoreDial } from "@/components/ScoreDial";
 import type { ScanResult } from "@/lib/types";
 
 interface ResultsViewProps {
+  scanId: string;
   websiteUrl: string;
-  result: ScanResult;
 }
 
 const SCAN_STEPS = [
@@ -19,25 +19,77 @@ const SCAN_STEPS = [
 ];
 
 /**
- * Renders a short simulated "scanning" animation, then reveals the mock result.
+ * Plays a "scanning" animation while the real scan runs in /api/scan/[id],
+ * then reveals the result. The animation holds on its last step until the
+ * result arrives (PageSpeed can take several seconds), and surfaces a retry if
+ * the request fails.
  *
- * TODO: When scans run as real background jobs, replace the timed simulation
- *   with polling of the scan_requests status and stream real progress.
+ * TODO: When scans run as real background jobs, poll scan_requests status and
+ *   stream real progress instead of stepping through fixed labels.
  */
-export function ResultsView({ websiteUrl, result }: ResultsViewProps) {
+export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
   const [step, setStep] = useState(0);
-  const [done, setDone] = useState(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
+  // Fetch the scored result once (re-run on retry).
   useEffect(() => {
-    if (step >= SCAN_STEPS.length) {
-      const finish = setTimeout(() => setDone(true), 500);
-      return () => clearTimeout(finish);
-    }
+    let cancelled = false;
+    setFailed(false);
+    const query = new URLSearchParams({ u: websiteUrl });
+    fetch(`/api/scan/${scanId}?${query.toString()}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+        return res.json() as Promise<ScanResult>;
+      })
+      .then((data) => {
+        if (!cancelled) setResult(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scanId, websiteUrl, attempt]);
+
+  // Advance the animation; hold on the final step until the result is in.
+  useEffect(() => {
+    const isLastStep = step >= SCAN_STEPS.length - 1;
+    if (isLastStep && result) return;
+    if (isLastStep && !result) return; // waiting on the fetch
     const timer = setTimeout(() => setStep((s) => s + 1), 700);
     return () => clearTimeout(timer);
-  }, [step]);
+  }, [step, result]);
 
-  if (!done) {
+  const revealed = result && step >= SCAN_STEPS.length - 1;
+
+  if (failed) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-lg">
+          <h1 className="text-lg font-bold text-ink">Scan didn&apos;t finish</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            We couldn&apos;t score {websiteUrl} just now.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setStep(0);
+              setResult(null);
+              setAttempt((a) => a + 1);
+            }}
+            className="btn-primary mt-6"
+          >
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!revealed) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-lg">
@@ -71,6 +123,9 @@ export function ResultsView({ websiteUrl, result }: ResultsViewProps) {
       </main>
     );
   }
+
+  // `revealed` implies a non-null result; this guard narrows the type for TS.
+  if (!result) return null;
 
   const topRecommendations = result.recommendations.slice(0, 5);
 

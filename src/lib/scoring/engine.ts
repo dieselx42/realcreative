@@ -4,19 +4,23 @@ import {
   type CategoryKey,
 } from "@/lib/scoring/categories";
 import { RECOMMENDATION_LIBRARY } from "@/lib/scoring/recommendations";
+import type { ScannerSignals } from "@/lib/scanner/types";
 import type { CategoryScore, Recommendation, ScanResult } from "@/lib/types";
 
 /**
- * Placeholder scoring engine.
+ * Scoring engine.
  *
- * For the MVP this produces a DETERMINISTIC score derived from the website URL
- * so the same restaurant always sees the same result, while different sites see
- * plausibly different scores. There is no real analysis yet.
+ * For each category, if a scanner supplied a real 0..1 signal it is used;
+ * otherwise the engine falls back to a DETERMINISTIC value derived from the
+ * website URL so the same restaurant always sees the same result and different
+ * sites see plausibly different scores.
  *
- * TODO: Replace this deterministic stand-in with real category scorers that
- *   consume the outputs of the scanner services in `src/lib/scanner`
- *   (PageSpeed, crawl, reviews, etc.). Each scanner should return a normalized
- *   0..1 signal per category that this engine multiplies by `maxPoints`.
+ * As of the first real scanner, `website_performance` is driven by Google
+ * PageSpeed when available; the remaining categories are still deterministic
+ * placeholders.
+ *
+ * TODO: Add real scorers for the remaining categories (crawl, local SEO,
+ *   reputation, retention, brand) so fewer categories rely on the fallback.
  */
 
 /** Small, stable string hash (FNV-1a). Deterministic across runs. */
@@ -41,11 +45,22 @@ function fractionFor(seed: number, category: CategoryKey): number {
   return 0.35 + normalized * 0.65;
 }
 
-export function scoreCategories(websiteUrl: string): CategoryScore[] {
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+export function scoreCategories(
+  websiteUrl: string,
+  signals: ScannerSignals = {},
+): CategoryScore[] {
   const seed = hashString(websiteUrl.toLowerCase());
 
   return SCORE_CATEGORIES.map((category) => {
-    const fraction = fractionFor(seed, category.key);
+    const signal = signals[category.key];
+    const fraction =
+      typeof signal === "number"
+        ? clamp01(signal)
+        : fractionFor(seed, category.key);
     const score = Math.round(category.maxPoints * fraction);
     return {
       key: category.key,
@@ -83,12 +98,13 @@ export function buildRecommendations(
     .sort((a, b) => a.priority - b.priority);
 }
 
-/** Run the full placeholder scoring pass for a scan request. */
+/** Run a full scoring pass for a scan request, blending any scanner signals. */
 export function generateScanResult(
   scanRequestId: string,
   websiteUrl: string,
+  signals: ScannerSignals = {},
 ): ScanResult {
-  const categories = scoreCategories(websiteUrl);
+  const categories = scoreCategories(websiteUrl, signals);
   const totalScore = categories.reduce((sum, c) => sum + c.score, 0);
 
   return {
