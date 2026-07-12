@@ -185,22 +185,30 @@ function summarize(
   // unreliable (it can return everything near the point ordered by reviews —
   // malls, big chains), so we enforce the category client-side. Exclude the
   // subject itself (by domain, else exact name) and anything without a rating.
-  const competitors = items
-    .filter((it) => {
-      if (!sharesCategory(it, categorySlug)) return false;
-      if (typeof it.rating?.value !== "number") return false;
-      const host = hostOf(it.url || it.domain);
-      const isSelf =
-        (targetHost && host && host === targetHost) ||
-        (targetName && norm(it.title) === targetName);
-      return !isSelf;
-    })
-    .map((it) => ({
-      name: it.title ?? "Nearby restaurant",
-      rating: it.rating?.value,
-      reviews:
-        typeof it.rating?.votes_count === "number" ? it.rating.votes_count : undefined,
-    }));
+  const peers = items.filter((it) => {
+    if (!sharesCategory(it, categorySlug)) return false;
+    if (typeof it.rating?.value !== "number") return false;
+    const host = hostOf(it.url || it.domain);
+    const isSelf =
+      (targetHost && host && host === targetHost) ||
+      (targetName && norm(it.title) === targetName);
+    return !isSelf;
+  });
+
+  // Dedupe chain locations: multiple "Chili's Grill & Bar" listings should count
+  // as one competitor, not three. Keep the highest-reviewed location per name.
+  const byName = new Map<string, Competitor>();
+  for (const it of peers) {
+    const name = it.title ?? "Nearby restaurant";
+    const reviews =
+      typeof it.rating?.votes_count === "number" ? it.rating.votes_count : undefined;
+    const key = norm(name);
+    const existing = byName.get(key);
+    if (!existing || (reviews ?? 0) > (existing.reviews ?? 0)) {
+      byName.set(key, { name, rating: it.rating?.value, reviews });
+    }
+  }
+  const competitors = [...byName.values()];
 
   if (competitors.length < 2) {
     return unavailable(
@@ -225,12 +233,27 @@ function summarize(
       input.rating > avgRating ? "above" : input.rating < avgRating ? "below" : "at";
   }
 
+  // Show peers *comparable in size* to the subject (closest review volume),
+  // rather than just the biggest chains — a local taco spot shouldn't be shown
+  // next to five national chains. Fall back to biggest when we don't know the
+  // subject's own review count.
+  const selected =
+    typeof input.reviews === "number"
+      ? competitors
+          .slice()
+          .sort(
+            (a, b) =>
+              Math.abs((a.reviews ?? 0) - input.reviews!) -
+              Math.abs((b.reviews ?? 0) - input.reviews!),
+          )
+          .slice(0, 5)
+      : competitors.slice().sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0)).slice(0, 5);
+  // Present the chosen peers cleanly, highest-reviewed first.
+  const displayList = selected.sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0));
+
   return {
     source: "dataforseo",
-    competitors: competitors
-      .slice()
-      .sort((a, b) => (b.reviews ?? 0) - (a.reviews ?? 0))
-      .slice(0, 5),
+    competitors: displayList,
     avgRating,
     avgReviews,
     rank,
