@@ -1,40 +1,39 @@
 import { NextResponse } from "next/server";
 
+import { runScanPipeline } from "@/lib/scan/run";
 import {
-  generateAiRecommendations,
-  isAiRecommendationsConfigured,
-} from "@/lib/recommendations/ai";
-import { runBusinessProfileScan } from "@/lib/scanner/business-profile";
-import { runCrawlScan } from "@/lib/scanner/crawl";
-import { runPerformanceScan } from "@/lib/scanner/performance";
-import { generateScanResult } from "@/lib/scoring/engine";
-import type { ScannerSignals } from "@/lib/scanner/types";
-import { getScanRequest } from "@/lib/store";
+  getScanRequest,
+  getStoredScanResult,
+  saveScanResult,
+} from "@/lib/store";
+import { isTriggerConfigured } from "@/lib/trigger";
 
 /**
  * PageSpeed Insights runs a full Lighthouse audit server-side and often takes
- * 10-25s. Vercel serverless functions default to a 10s timeout (Hobby), which
- * would kill the scan before it returns. Raise the ceiling so real results have
- * time to come back. (Hobby allows up to 60s.)
+ * 10-25s. When scanning inline, Vercel serverless functions default to a 10s
+ * timeout (Hobby), which would kill the scan before it returns. Raise the
+ * ceiling. (Hobby allows up to 60s.)
  */
 export const maxDuration = 60;
 
+/** How long to wait for the background job before self-healing with an inline scan. */
+const BACKGROUND_GRACE_MS = 90_000;
+
 /**
- * Runs the scan for a scan request and returns the scored result as JSON. The
- * results page fetches this on the client so the (potentially slow) PageSpeed
- * call does not block the initial page render, and the API key stays on the
- * server.
+ * Returns the scored result for a scan.
  *
- * The website URL is resolved from the persisted scan when available, otherwise
- * from the `u` query param passed through by the results page — see the note in
- * submitLead (actions.ts) about stateless rendering without a database.
+ * Three paths, in order:
+ *   1. A completed result is already persisted (e.g. by the Trigger.dev
+ *      background job) → return it.
+ *   2. Trigger.dev is configured and the scan is still recent → the background
+ *      job is presumably running; return {status:"processing"} so the results
+ *      page keeps polling.
+ *   3. Otherwise → run the scan inline (the default when Trigger.dev is not
+ *      configured, and a self-heal if a background job never completed),
+ *      persist it when possible, and return it.
  *
  * The response includes a `meta` block describing where each real signal came
- * from, so it is possible to tell a real PageSpeed score from the deterministic
- * fallback (open this route directly in a browser to inspect it).
- *
- * TODO: Once scans run as Trigger.dev background jobs, this route should read a
- *   persisted scan_results row (and report status) instead of scanning inline.
+ * from (open this route directly in a browser to inspect it).
  */
 export async function GET(
   request: Request,
@@ -43,8 +42,6 @@ export async function GET(
   const url = new URL(request.url);
   const scanRequest = await getScanRequest(params.id);
   const websiteUrl = scanRequest?.websiteUrl ?? url.searchParams.get("u");
-  // Business name + city (for the Google Business Profile lookup) are passed
-  // through as query params by the results page; see submitLead (actions.ts).
   const businessName = url.searchParams.get("n") ?? undefined;
   const city = url.searchParams.get("c") ?? undefined;
 
@@ -55,73 +52,38 @@ export async function GET(
     );
   }
 
-  // Real scanners run in parallel:
-  //   - PageSpeed → Website Performance
-  //   - homepage crawl → Conversion, Online Ordering, Retention/CRM, Brand
-  //   - DataForSEO Google Business Profile → Local SEO, Reputation
-  // Categories with no real signal fall back to deterministic scoring.
-  const [performance, crawl, business] = await Promise.all([
-    runPerformanceScan(websiteUrl),
-    runCrawlScan(websiteUrl),
-    runBusinessProfileScan({ websiteUrl, businessName, city }),
-  ]);
-
-  const signals: ScannerSignals = {
-    ...(performance.signal === null
-      ? {}
-      : { website_performance: performance.signal }),
-    ...crawl.signals,
-    ...business.signals,
-  };
-
-  const result = generateScanResult(params.id, websiteUrl, signals);
-
-  // Upgrade the static recommendations to AI-generated ones grounded in the
-  // real findings, when ANTHROPIC_API_KEY is configured. Falls back silently to
-  // the static templates already on `result` if unset or the call fails.
-  let recommendationSource: "claude" | "template" = "template";
-  if (isAiRecommendationsConfigured()) {
-    const aiRecs = await generateAiRecommendations({
-      businessName,
-      city,
-      websiteUrl,
-      categories: result.categories,
-      findings: {
-        performance: { source: performance.source, metrics: performance.metrics },
-        crawl: { source: crawl.source, findings: crawl.findings },
-        googleBusinessProfile: {
-          source: business.source,
-          metrics: business.metrics,
-          findings: business.findings,
-        },
-      },
+  // 1. Already-persisted result (background job finished, or a prior inline run).
+  const stored = await getStoredScanResult(params.id);
+  if (stored) {
+    return NextResponse.json({
+      status: "completed",
+      ...stored.result,
+      meta: stored.meta,
     });
-    if (aiRecs) {
-      result.recommendations = aiRecs;
-      recommendationSource = "claude";
-    }
   }
 
-  return NextResponse.json({
-    ...result,
-    meta: {
-      recommendations: { source: recommendationSource },
-      performance: {
-        source: performance.source, // "pagespeed" | "unavailable"
-        error: performance.error,
-        metrics: performance.metrics,
-      },
-      crawl: {
-        source: crawl.source, // "crawl" | "unavailable"
-        error: crawl.error,
-        findings: crawl.findings,
-      },
-      businessProfile: {
-        source: business.source, // "dataforseo" | "unavailable"
-        error: business.error,
-        metrics: business.metrics,
-        findings: business.findings,
-      },
-    },
+  // 2. Background job in flight — tell the client to keep polling.
+  if (isTriggerConfigured() && scanRequest) {
+    const ageMs = Date.now() - new Date(scanRequest.createdAt).getTime();
+    if (ageMs < BACKGROUND_GRACE_MS) {
+      return NextResponse.json({ status: "processing" }, { status: 202 });
+    }
+    // Fell through the grace window — the job likely failed; self-heal below.
+  }
+
+  // 3. Run inline (default / fallback), persist when a database is configured.
+  const { result, meta } = await runScanPipeline({
+    scanId: params.id,
+    websiteUrl,
+    businessName,
+    city,
   });
+
+  try {
+    await saveScanResult(params.id, { result, meta });
+  } catch (error) {
+    console.error("Failed to persist inline scan result", error);
+  }
+
+  return NextResponse.json({ status: "completed", ...result, meta });
 }

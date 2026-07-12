@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { createScanRequest } from "@/lib/store";
+import { isTriggerConfigured } from "@/lib/trigger";
 import { leadFormSchema, toFieldErrors, type FieldErrors } from "@/lib/validation";
 
 export interface SubmitLeadState {
@@ -51,6 +52,25 @@ export async function submitLead(
       formError:
         "Something went wrong creating your scan. Please try again in a moment.",
     };
+  }
+
+  // When Trigger.dev is configured, enqueue the scan as a background job so it
+  // runs off the request path; the results page polls Supabase for it. Best
+  // effort — if enqueuing fails, the /api/scan route still runs the scan inline
+  // as a fallback, so the user always gets a result. Dynamic import keeps the
+  // Trigger.dev SDK out of the bundle unless it's actually used.
+  if (isTriggerConfigured()) {
+    try {
+      const { scanWebsiteTask } = await import("@/trigger/scan");
+      await scanWebsiteTask.trigger({
+        scanId,
+        websiteUrl: parsed.data.websiteUrl,
+        businessName: parsed.data.restaurantName,
+        city: parsed.data.city,
+      });
+    } catch (error) {
+      console.error("Failed to enqueue background scan", error);
+    }
   }
 
   // Values needed to render/scan are passed forward in the query string so the

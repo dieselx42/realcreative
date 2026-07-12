@@ -163,26 +163,47 @@ export function ResultsView({
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  // Fetch the scored result once (re-run on retry).
+  // Fetch the scored result, polling while a background job is still running.
+  // The API returns {status:"processing"} (202) until the Trigger.dev job (when
+  // configured) persists the result; otherwise it runs inline and returns the
+  // result on the first call.
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
     const query = new URLSearchParams({ u: websiteUrl });
     if (businessName) query.set("n", businessName);
     if (city) query.set("c", city);
-    fetch(`/api/scan/${scanId}?${query.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Scan failed (${res.status})`);
-        return res.json() as Promise<ScanApiResponse>;
-      })
-      .then((data) => {
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40; // ~40 × 3s ≈ 2 min before giving up
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/scan/${scanId}?${query.toString()}`);
+        if (!res.ok && res.status !== 202) {
+          throw new Error(`Scan failed (${res.status})`);
+        }
+        const data = (await res.json()) as ScanApiResponse & { status?: string };
         if (cancelled) return;
+
+        if (data.status === "processing") {
+          attempts += 1;
+          if (attempts > MAX_ATTEMPTS) {
+            setFailed(true);
+            return;
+          }
+          setTimeout(poll, 3000);
+          return;
+        }
+
         setResult(data);
         setMeta(data.meta ?? null);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setFailed(true);
-      });
+      }
+    };
+
+    poll();
     return () => {
       cancelled = true;
     };

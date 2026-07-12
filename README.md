@@ -123,6 +123,28 @@ supabase/
   migrations/                SQL schema + seed
 ```
 
+## Background scans with Trigger.dev (optional)
+
+By default the scan runs **inline** when the results page loads (`/api/scan`).
+With Trigger.dev configured, the scan instead runs as a **background job** off
+the request path, writes its result to Supabase, and the results page polls for
+it. This requires Supabase (the job and the app are separate processes and need
+a shared database).
+
+To enable it:
+
+1. Create a Trigger.dev project and put its ref in `trigger.config.ts` (or set
+   `TRIGGER_PROJECT_REF`).
+2. In the Trigger.dev dashboard, set the task's runtime env vars (the same
+   Supabase / PageSpeed / DataForSEO / Anthropic keys the app uses).
+3. Deploy the task: `npx trigger.dev@latest deploy`.
+4. Set `TRIGGER_SECRET_KEY` in the app's environment (Vercel).
+
+The pieces: the task in `src/trigger/scan.ts`, the shared pipeline in
+`src/lib/scan/run.ts`, enqueue in `src/app/actions.ts`, and the poll/self-heal
+logic in `src/app/api/scan/[id]/route.ts`. If a job never completes, the API
+route falls back to running the scan inline, so the app never gets stuck.
+
 ## Where future integrations plug in
 
 Search the codebase for `TODO:` — the key seams are:

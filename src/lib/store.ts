@@ -10,7 +10,13 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase/server";
 import type { LeadFormData } from "@/lib/validation";
-import type { ScanRequest } from "@/lib/types";
+import type { ScanRequest, ScanResult, ScanResultMeta } from "@/lib/types";
+
+/** The scored result + diagnostic meta persisted for a completed scan. */
+export interface StoredScanResult {
+  result: ScanResult;
+  meta: ScanResultMeta;
+}
 
 /**
  * Persistence layer for leads / restaurants / scan requests.
@@ -209,4 +215,56 @@ function mapScanRow(row: ScanRow): ScanRequest {
     status: row.status,
     createdAt: row.created_at,
   };
+}
+
+// --- Scan results (used by the Trigger.dev background-job flow) -------------
+// These require Supabase — the background task (running on Trigger.dev) and the
+// results page (running on Vercel) are different processes, so they can only
+// share a real database, not the local JSON-file fallback. The scored result +
+// meta are stored as a JSON blob in scan_results.raw.
+
+/**
+ * Persist a completed scan result and mark the scan request completed.
+ * No-op (returns false) when Supabase is not configured.
+ */
+export async function saveScanResult(
+  scanRequestId: string,
+  stored: StoredScanResult,
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  const supabase = createServiceSupabaseClient();
+
+  const { error: resultError } = await supabase.from("scan_results").upsert(
+    {
+      scan_request_id: scanRequestId,
+      total_score: stored.result.totalScore,
+      max_score: stored.result.maxScore,
+      raw: stored as unknown as Record<string, unknown>,
+    },
+    { onConflict: "scan_request_id" },
+  );
+  if (resultError) throw resultError;
+
+  const { error: statusError } = await supabase
+    .from("scan_requests")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("id", scanRequestId);
+  if (statusError) throw statusError;
+
+  return true;
+}
+
+/** Read a persisted scan result, or null if none exists yet. */
+export async function getStoredScanResult(
+  scanRequestId: string,
+): Promise<StoredScanResult | null> {
+  if (!isSupabaseConfigured() || !UUID_RE.test(scanRequestId)) return null;
+  const supabase = createServiceSupabaseClient();
+  const { data, error } = await supabase
+    .from("scan_results")
+    .select("raw")
+    .eq("scan_request_id", scanRequestId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.raw as StoredScanResult | undefined) ?? null;
 }
