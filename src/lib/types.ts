@@ -101,6 +101,8 @@ export interface ScanResultMeta {
     source: "crawl" | "unavailable";
     error?: string;
     findings: Partial<Record<CategoryKey, CrawlFinding[]>>;
+    providers?: { name: string; type: "direct" | "marketplace" }[];
+    pagesCrawled?: number;
   };
   businessProfile?: {
     source: "dataforseo" | "unavailable";

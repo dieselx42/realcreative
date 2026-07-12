@@ -94,13 +94,26 @@ interface ProfileFields {
   hasCategory: boolean;
   hasWebsite: boolean;
   hasNap: boolean;
+  /** Photos on the Google Business Profile (completeness signal). */
+  photoCount?: number;
+  /** Whether opening hours are published on the profile. */
+  hasHours: boolean;
 }
 
 /** Shared scorer so `my_business_info` and listings candidates score identically. */
 function buildScan(
   fields: ProfileFields,
 ): Pick<BusinessProfileScan, "signals" | "findings" | "metrics" | "source"> {
-  const { rating, reviews, isClaimed, hasCategory, hasWebsite, hasNap } = fields;
+  const {
+    rating,
+    reviews,
+    isClaimed,
+    hasCategory,
+    hasWebsite,
+    hasNap,
+    photoCount,
+    hasHours,
+  } = fields;
 
   // Reputation: rating quality, discounted by low review volume (a 5.0 with 3
   // reviews is weaker evidence than a 4.5 with 300).
@@ -111,25 +124,36 @@ function buildScan(
     reputation = clamp01(ratingScore * (0.6 + 0.4 * volumeConfidence));
   }
 
+  // A well-stocked profile has a healthy set of photos.
+  const hasPhotos = (photoCount ?? 0) >= 10;
+
   // Local SEO: presence and completeness of the Google Business Profile.
   const localSeo = clamp01(
-    0.4 + // a profile exists at all
-      (isClaimed ? 0.2 : 0) +
-      (hasCategory ? 0.15 : 0) +
+    0.35 + // a profile exists at all
+      (isClaimed ? 0.15 : 0) +
+      (hasCategory ? 0.1 : 0) +
       (hasWebsite ? 0.1 : 0) +
-      (hasNap ? 0.15 : 0),
+      (hasNap ? 0.1 : 0) +
+      (hasHours ? 0.1 : 0) +
+      (hasPhotos ? 0.1 : 0),
   );
 
   const signals: ScannerSignals = { local_seo: localSeo };
   if (typeof reputation === "number") signals.reputation = reputation;
 
+  const localSeoFindings: BusinessProfileFinding[] = [
+    { label: "Google Business Profile", ok: true },
+    { label: "Claimed", ok: isClaimed },
+    { label: "Category set", ok: hasCategory },
+    { label: "Website linked", ok: hasWebsite },
+    { label: "Hours listed", ok: hasHours },
+  ];
+  if (typeof photoCount === "number") {
+    localSeoFindings.push({ label: `${photoCount} photos`, ok: hasPhotos });
+  }
+
   const findings: Partial<Record<CategoryKey, BusinessProfileFinding[]>> = {
-    local_seo: [
-      { label: "Google Business Profile", ok: true },
-      { label: "Claimed", ok: isClaimed },
-      { label: "Category set", ok: hasCategory },
-      { label: "Website linked", ok: hasWebsite },
-    ],
+    local_seo: localSeoFindings,
     reputation: [
       {
         label: rating != null ? `${rating.toFixed(1)}★ rating` : "No rating",
@@ -274,6 +298,9 @@ async function tryMyBusinessInfo(
       hasCategory: Boolean(item.category),
       hasWebsite: Boolean(item.url),
       hasNap: Boolean(item.address) && Boolean(item.phone),
+      photoCount:
+        typeof item.total_photos === "number" ? item.total_photos : undefined,
+      hasHours: Boolean(item.work_time),
     };
     return {
       ...buildScan(fields),
@@ -369,6 +396,9 @@ async function trySearchListings(
       hasCategory: Boolean(item.category),
       hasWebsite: Boolean(item.url || item.domain),
       hasNap: Boolean(item.address || item.address_info?.address) && Boolean(item.phone),
+      photoCount:
+        typeof item.total_photos === "number" ? item.total_photos : undefined,
+      hasHours: Boolean(item.work_time),
     };
     return {
       ...buildScan(fields),
@@ -454,6 +484,8 @@ interface MyBusinessItem {
   address?: string;
   phone?: string;
   is_claimed?: boolean;
+  total_photos?: number;
+  work_time?: unknown;
 }
 
 interface MyBusinessResponse {
@@ -474,6 +506,8 @@ interface ListingItem {
   phone?: string;
   rating?: { value?: number; votes_count?: number };
   is_claimed?: boolean;
+  total_photos?: number;
+  work_time?: unknown;
 }
 
 interface ListingsResponse {

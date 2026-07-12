@@ -96,17 +96,20 @@ Effort is rough: **S** = <½ day, **M** = 1–2 days, **L** = 3+ days.
   form; highlights the matching category ("Your focus") and rides along to the lead.
 
 ### Phase 2 — Scan depth (more accurate & specific)
-- [ ] **Multi-page crawl** *(M)* — also fetch menu + order pages, not just the
-  homepage; more signals, fewer false negatives.
-- [ ] **Ordering-provider detection** *(M)* — identify Toast / ChowNow / Square /
-  DoorDash / Uber Eats and quantify marketplace dependency (feeds revenue math).
-- [ ] **Deeper Google profile** *(M)* — photo count, posting recency, hours
-  completeness, and **review-response rate** + review velocity. *A gap even for
-  Owner.*
+- [x] **Multi-page crawl** *(M)* — `crawl.ts` follows the menu/order links and
+  crawls those pages too, merging findings so ordering CTAs/providers on a
+  subpage aren't missed (verified: Toast detected on a menu subpage).
+- [x] **Ordering-provider detection** *(M)* — identifies the specific provider
+  (Toast / ChowNow / Square / Olo / DoorDash / Uber Eats / Grubhub / …), labels
+  direct vs marketplace, and feeds the revenue math.
+- [x] **Deeper Google profile** *(partial)* — photo count + hours completeness
+  added to Local SEO (from the existing DataForSEO response, no extra call).
+  *Still to do: review-response rate + review recency — needs the DataForSEO
+  reviews endpoint (an extra paid call keyed on the matched cid/place_id).*
 - [ ] **Real social presence check** *(S)* — verify IG/FB exist and grab follower
-  counts, not just "link present."
+  counts, not just "link present." *Deferred — follower scraping is brittle/blocked.*
 - [ ] **Directory/NAP consistency** *(L)* — check name/address/phone across
-  major directories (DataForSEO business listings).
+  major directories (DataForSEO business listings). *Deferred.*
 
 ### Phase 3 — The deliverable (turn a scan into a leave-behind)
 - [ ] **Confirm-your-business step** *(M)* — show the matched candidates and let

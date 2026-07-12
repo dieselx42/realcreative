@@ -101,7 +101,11 @@ export async function runScanPipeline(
       categories: result.categories,
       findings: {
         performance: { source: performance.source, metrics: performance.metrics },
-        crawl: { source: crawl.source, findings: crawl.findings },
+        crawl: {
+          source: crawl.source,
+          findings: crawl.findings,
+          orderingProviders: crawl.providers,
+        },
         googleBusinessProfile: {
           source: business.source,
           metrics: business.metrics,
@@ -147,6 +151,8 @@ export async function runScanPipeline(
       source: crawl.source,
       error: crawl.error,
       findings: crawl.findings,
+      providers: crawl.providers,
+      pagesCrawled: crawl.pagesCrawled,
     },
     businessProfile: {
       source: business.source,
