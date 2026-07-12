@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CategoryKey } from "@/lib/scoring/categories";
 import type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
+import { resolveUsLocationCode } from "@/lib/scanner/location-resolver";
 
 /**
  * Local SEO + Reputation scanner backed by DataForSEO's Google Business Profile
@@ -65,30 +66,44 @@ export async function runBusinessProfileScan(
   }
 
   const { timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const auth = Buffer.from(`${login}:${password}`).toString("base64");
 
   // my_business_info returns data only when Google resolves a *single* local
-  // business panel. Two ways to get there:
-  //   - With an explicit city-level location (DATAFORSEO_LOCATION, e.g.
-  //     "Miami,Florida,United States"), Google already pins the locale, so the
-  //     keyword should be just the business name — a cleaner, higher-hit query.
-  //   - Without one, we fall back to a country-wide search (location_code 2840
-  //     = United States, which the business-data endpoints accept — a country
-  //     *name* like "United States" is rejected) and lean on the typed city
-  //     inside the keyword as the only disambiguation signal we have. A common
-  //     restaurant name over the whole US is ambiguous and returns "No Search
-  //     Results" — set DATAFORSEO_LOCATION to fix that.
-  const locationName = process.env.DATAFORSEO_LOCATION;
-  const keyword = locationName
-    ? (context.businessName ?? "")
-    : [context.businessName, context.city].filter(Boolean).join(" ");
+  // business panel. A common restaurant name searched country-wide is ambiguous
+  // and yields "No Search Results", so we want a city-level location. In order
+  // of preference:
+  //   1. DATAFORSEO_LOCATION — an explicit override (full name, e.g.
+  //      "Miami,Florida,United States"). Wins when set.
+  //   2. The lead's typed city, resolved per-lead to a DataForSEO location_code
+  //      via the locations list. This scales to leads from any city.
+  //   3. Country-wide fallback (location_code 2840 = United States), with the
+  //      typed city folded into the keyword as a weak disambiguation hint.
+  // Note: a country *name* like "United States" is rejected by the location
+  // database ("Invalid Field: 'location_name'"), which is why we use codes.
+  const explicitLocation = process.env.DATAFORSEO_LOCATION;
+  let resolvedCode: number | null = null;
+  if (!explicitLocation && context.city) {
+    resolvedCode = await resolveUsLocationCode(context.city, auth, timeoutMs);
+  }
+
+  const businessName = context.businessName ?? "";
+  const hasCityLevelLocation = Boolean(explicitLocation) || resolvedCode != null;
+  // With a city-level location pinned, the keyword should be just the business
+  // name (cleaner, higher-hit). Otherwise keep the city in the keyword.
+  const keyword = hasCityLevelLocation
+    ? businessName
+    : [businessName, context.city].filter(Boolean).join(" ");
+
   const task: Record<string, unknown> = { keyword, language_code: "en" };
-  if (locationName) {
-    task.location_name = locationName;
+  if (explicitLocation) {
+    task.location_name = explicitLocation;
+  } else if (resolvedCode != null) {
+    task.location_code = resolvedCode;
   } else {
     task.location_code = Number(process.env.DATAFORSEO_LOCATION_CODE) || 2840;
   }
 
-  const auth = Buffer.from(`${login}:${password}`).toString("base64");
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
