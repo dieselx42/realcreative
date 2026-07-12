@@ -364,8 +364,11 @@ export function ResultsView({
 
         {/* Top recommendations */}
         <section className="mt-10">
-          <h2 className="text-lg font-bold text-ink">
+          <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-ink">
             Top 5 recommendations
+            {meta?.recommendations?.source === "claude" ? (
+              <LiveBadge label="AI-tailored" tone="green" />
+            ) : null}
           </h2>
           <ol className="mt-4 space-y-3">
             {topRecommendations.map((rec) => (

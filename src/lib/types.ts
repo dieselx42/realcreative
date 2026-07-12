@@ -88,6 +88,9 @@ export interface CrawlFinding {
  * where each real signal came from. Extra to the core scoring types.
  */
 export interface ScanResultMeta {
+  recommendations?: {
+    source: "claude" | "template";
+  };
   performance?: {
     source: "pagespeed" | "unavailable";
     error?: string;

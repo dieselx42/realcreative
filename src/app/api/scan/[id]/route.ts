@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  generateAiRecommendations,
+  isAiRecommendationsConfigured,
+} from "@/lib/recommendations/ai";
 import { runBusinessProfileScan } from "@/lib/scanner/business-profile";
 import { runCrawlScan } from "@/lib/scanner/crawl";
 import { runPerformanceScan } from "@/lib/scanner/performance";
@@ -72,9 +76,36 @@ export async function GET(
 
   const result = generateScanResult(params.id, websiteUrl, signals);
 
+  // Upgrade the static recommendations to AI-generated ones grounded in the
+  // real findings, when ANTHROPIC_API_KEY is configured. Falls back silently to
+  // the static templates already on `result` if unset or the call fails.
+  let recommendationSource: "claude" | "template" = "template";
+  if (isAiRecommendationsConfigured()) {
+    const aiRecs = await generateAiRecommendations({
+      businessName,
+      city,
+      websiteUrl,
+      categories: result.categories,
+      findings: {
+        performance: { source: performance.source, metrics: performance.metrics },
+        crawl: { source: crawl.source, findings: crawl.findings },
+        googleBusinessProfile: {
+          source: business.source,
+          metrics: business.metrics,
+          findings: business.findings,
+        },
+      },
+    });
+    if (aiRecs) {
+      result.recommendations = aiRecs;
+      recommendationSource = "claude";
+    }
+  }
+
   return NextResponse.json({
     ...result,
     meta: {
+      recommendations: { source: recommendationSource },
       performance: {
         source: performance.source, // "pagespeed" | "unavailable"
         error: performance.error,
