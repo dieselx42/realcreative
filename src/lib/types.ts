@@ -90,6 +90,7 @@ export interface CrawlFinding {
 export interface ScanResultMeta {
   recommendations?: {
     source: "claude" | "template";
+    error?: string;
   };
   performance?: {
     source: "pagespeed" | "unavailable";

@@ -55,6 +55,7 @@ export async function runScanPipeline(
   const result = generateScanResult(scanId, websiteUrl, signals);
 
   let recommendationSource: "claude" | "template" = "template";
+  let recommendationError: string | undefined;
   if (isAiRecommendationsConfigured()) {
     const aiRecs = await generateAiRecommendations({
       businessName,
@@ -71,14 +72,16 @@ export async function runScanPipeline(
         },
       },
     });
-    if (aiRecs) {
-      result.recommendations = aiRecs;
+    if (aiRecs.recommendations) {
+      result.recommendations = aiRecs.recommendations;
       recommendationSource = "claude";
+    } else {
+      recommendationError = aiRecs.error;
     }
   }
 
   const meta: ScanResultMeta = {
-    recommendations: { source: recommendationSource },
+    recommendations: { source: recommendationSource, error: recommendationError },
     performance: {
       source: performance.source,
       error: performance.error,
