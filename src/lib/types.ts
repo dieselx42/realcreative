@@ -77,6 +77,12 @@ export interface PerformanceMetrics {
   fcpMs?: number;
 }
 
+/** A single detected (or missing) feature from the homepage crawl. */
+export interface CrawlFinding {
+  label: string;
+  ok: boolean;
+}
+
 /**
  * Diagnostic metadata returned alongside a scan result by /api/scan, describing
  * where each real signal came from. Extra to the core scoring types.
@@ -86,6 +92,11 @@ export interface ScanResultMeta {
     source: "pagespeed" | "unavailable";
     error?: string;
     metrics: PerformanceMetrics;
+  };
+  crawl?: {
+    source: "crawl" | "unavailable";
+    error?: string;
+    findings: Partial<Record<CategoryKey, CrawlFinding[]>>;
   };
 }
 

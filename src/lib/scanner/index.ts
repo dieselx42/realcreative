@@ -1,10 +1,12 @@
 import "server-only";
 
+import { crawlScanner } from "@/lib/scanner/crawl";
 import { performanceScanner } from "@/lib/scanner/performance";
 import type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
 
 export type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
 export { runPerformanceScan } from "@/lib/scanner/performance";
+export { runCrawlScan } from "@/lib/scanner/crawl";
 
 /**
  * Modular scanner services.
@@ -14,19 +16,10 @@ export { runPerformanceScan } from "@/lib/scanner/performance";
  * these by each category's `maxPoints`; categories with no signal fall back to
  * deterministic placeholder scoring.
  *
- * `performanceScanner` is the first real implementation (Google PageSpeed). The
- * rest are still stubs returning `{}`.
+ * Real implementations: `performanceScanner` (Google PageSpeed → Website
+ * Performance) and `crawlScanner` (Cheerio homepage crawl → Conversion, Online
+ * Ordering, Retention/CRM, Brand/Content). Local SEO and Reputation are stubs.
  */
-
-// TODO: Crawl scanner — use Playwright/Cheerio to crawl the homepage and menu,
-//   detecting order buttons, contact capture, schema markup, and content depth
-//   (feeds `conversion`, `online_ordering`, `retention_crm`, `brand_content`).
-export const crawlScanner: Scanner = {
-  name: "crawl",
-  async run() {
-    return {};
-  },
-};
 
 // TODO: Local SEO scanner — use DataForSEO (or Google Business Profile) to read
 //   local pack presence, NAP consistency, and category coverage (`local_seo`).

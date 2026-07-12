@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ScoreDial } from "@/components/ScoreDial";
 import type {
+  CrawlFinding,
   PerformanceMetrics,
   ScanApiResponse,
   ScanResult,
@@ -84,6 +85,45 @@ function PerformanceVitals({ metrics }: { metrics: PerformanceMetrics }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** Renders detected/missing features from the homepage crawl as chips. */
+function CrawlFindings({ findings }: { findings: CrawlFinding[] }) {
+  if (findings.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {findings.map((f) => (
+        <span
+          key={f.label}
+          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${
+            f.ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-slate-200 bg-slate-50 text-slate-400"
+          }`}
+        >
+          <span>{f.ok ? "✓" : "—"}</span>
+          {f.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Small "live data" pill shown on categories backed by a real scanner. */
+function LiveBadge({ label, tone }: { label: string; tone: "green" | "blue" }) {
+  const cls =
+    tone === "green"
+      ? "bg-green-50 text-green-700"
+      : "bg-sky-50 text-sky-700";
+  const dot = tone === "green" ? "bg-green-500" : "bg-sky-500";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
   );
 }
 
@@ -246,19 +286,23 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                 meta?.performance?.source === "pagespeed"
                   ? meta.performance
                   : null;
+              const crawlFindings =
+                meta?.crawl?.source === "crawl"
+                  ? meta.crawl.findings[category.key]
+                  : undefined;
               return (
                 <div
                   key={category.key}
                   className="rounded-xl border border-slate-200 bg-white p-4"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                       {category.label}
                       {livePerf ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-700">
-                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                          Live PageSpeed
-                        </span>
+                        <LiveBadge label="Live PageSpeed" tone="green" />
+                      ) : null}
+                      {crawlFindings ? (
+                        <LiveBadge label="Live site scan" tone="blue" />
                       ) : null}
                     </span>
                     <span className="text-sm font-semibold text-ink-soft">
@@ -276,6 +320,9 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                   </div>
                   {livePerf ? (
                     <PerformanceVitals metrics={livePerf.metrics} />
+                  ) : null}
+                  {crawlFindings ? (
+                    <CrawlFindings findings={crawlFindings} />
                   ) : null}
                 </div>
               );

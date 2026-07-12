@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { runCrawlScan } from "@/lib/scanner/crawl";
 import { runPerformanceScan } from "@/lib/scanner/performance";
 import { generateScanResult } from "@/lib/scoring/engine";
 import type { ScannerSignals } from "@/lib/scanner/types";
@@ -45,13 +46,20 @@ export async function GET(
     );
   }
 
-  // First real scanner: Website Performance via PageSpeed. Other categories
-  // still fall back to deterministic scoring inside the engine.
-  const performance = await runPerformanceScan(websiteUrl);
-  const signals: ScannerSignals =
-    performance.signal === null
+  // Real scanners run in parallel: PageSpeed (Website Performance) and the
+  // homepage crawl (Conversion, Online Ordering, Retention/CRM, Brand/Content).
+  // Remaining categories fall back to deterministic scoring inside the engine.
+  const [performance, crawl] = await Promise.all([
+    runPerformanceScan(websiteUrl),
+    runCrawlScan(websiteUrl),
+  ]);
+
+  const signals: ScannerSignals = {
+    ...(performance.signal === null
       ? {}
-      : { website_performance: performance.signal };
+      : { website_performance: performance.signal }),
+    ...crawl.signals,
+  };
 
   const result = generateScanResult(params.id, websiteUrl, signals);
 
@@ -62,6 +70,11 @@ export async function GET(
         source: performance.source, // "pagespeed" | "unavailable"
         error: performance.error,
         metrics: performance.metrics,
+      },
+      crawl: {
+        source: crawl.source, // "crawl" | "unavailable"
+        error: crawl.error,
+        findings: crawl.findings,
       },
     },
   });
