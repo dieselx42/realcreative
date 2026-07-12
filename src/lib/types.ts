@@ -117,7 +117,7 @@ export interface ScanResultMeta {
     };
   };
   competitors?: {
-    competitors: { name: string; rating?: number; reviews?: number }[];
+    competitors: { name: string; rating?: number; reviews?: number; area?: string }[];
     avgRating?: number;
     avgReviews?: number;
     rank?: number;

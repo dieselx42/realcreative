@@ -217,7 +217,12 @@ function CompetitorPanel({
               key={`${c.name}-${i}`}
               className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
             >
-              <span className="truncate text-ink">{c.name}</span>
+              <span className="min-w-0 truncate">
+                <span className="text-ink">{c.name}</span>
+                {c.area ? (
+                  <span className="ml-2 text-xs text-ink-muted">{c.area}</span>
+                ) : null}
+              </span>
               <span className="flex-none font-medium text-ink-soft">
                 {typeof c.rating === "number" ? `${c.rating.toFixed(1)}★` : "—"}
                 <span className="ml-2 text-ink-muted">

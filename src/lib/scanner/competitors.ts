@@ -28,6 +28,8 @@ export interface Competitor {
   name: string;
   rating?: number;
   reviews?: number;
+  /** City or neighborhood, so the report can confirm they're genuinely local. */
+  area?: string;
 }
 
 export interface CompetitorScan {
@@ -65,6 +67,7 @@ interface ListingItem {
   url?: string;
   domain?: string;
   rating?: { value?: number; votes_count?: number };
+  address_info?: { borough?: string; city?: string; region?: string };
 }
 
 /**
@@ -202,10 +205,11 @@ function summarize(
     const name = it.title ?? "Nearby restaurant";
     const reviews =
       typeof it.rating?.votes_count === "number" ? it.rating.votes_count : undefined;
+    const area = it.address_info?.borough || it.address_info?.city || undefined;
     const key = norm(name);
     const existing = byName.get(key);
     if (!existing || (reviews ?? 0) > (existing.reviews ?? 0)) {
-      byName.set(key, { name, rating: it.rating?.value, reviews });
+      byName.set(key, { name, rating: it.rating?.value, reviews, area });
     }
   }
   const competitors = [...byName.values()];
