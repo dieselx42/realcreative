@@ -77,14 +77,28 @@ The migration creates: `leads`, `restaurants`, `scan_requests`, `scan_results`,
 seven score categories, and enables Row Level Security. Writes go through the
 server-side **service role** key; the public **anon** key cannot read lead data.
 
-## How scoring works today
+Also apply `0002_lead_goal.sql` (adds a `goal` column to `leads` for the landing
+quiz). It's optional — the app writes the goal best-effort, so lead creation
+still works if this migration hasn't been run.
 
-1. The lead form (`src/components/LeadForm.tsx`) posts to the `submitLead`
-   server action (`src/app/actions.ts`).
-2. Validation runs via a shared Zod schema (`src/lib/validation.ts`).
-3. A lead + restaurant + scan request are created (`src/lib/store.ts`).
-4. The results page computes a **deterministic** score from the URL using the
-   scoring engine (`src/lib/scoring/engine.ts`) so results are stable per site.
+## How the funnel works today
+
+1. The landing form (`src/components/ScanStartForm.tsx`) collects only the
+   restaurant name, website, city, and a one-question goal quiz, and posts to the
+   `startScan` server action (`src/app/actions.ts`). No lead is created yet.
+2. `startScan` redirects to the results page, which runs the scan and shows the
+   score, the **local competitor comparison**, and the **estimated revenue
+   impact** — no email required (Owner.com's grader model).
+3. The Top-5 action plan is gated: `LeadCaptureForm` collects contact info and
+   calls the `captureLead` action, which is where a lead is actually persisted
+   (`src/lib/store.ts`).
+4. Scoring blends real scanner signals with a **deterministic** baseline from the
+   URL (`src/lib/scoring/engine.ts`) so results are stable per site.
+
+The report's persuasion pieces live in `src/lib/scanner/competitors.ts`
+(same-category benchmarking via DataForSEO) and `src/lib/scoring/revenue.ts`
+(dollar-impact estimates). See `docs/ROADMAP.md` for the competitive teardown and
+what's next.
 
 The seven categories and their point budgets (which sum to 100) are the single
 source of truth in `src/lib/scoring/categories.ts`:

@@ -5,7 +5,7 @@ import { getScanRequest } from "@/lib/store";
 
 interface ResultsPageProps {
   params: { id: string };
-  searchParams: { u?: string; n?: string; c?: string };
+  searchParams: { u?: string; n?: string; c?: string; g?: string };
 }
 
 export default async function ResultsPage({
@@ -31,6 +31,7 @@ export default async function ResultsPage({
       websiteUrl={websiteUrl}
       businessName={searchParams.n}
       city={searchParams.c}
+      goal={searchParams.g}
     />
   );
 }

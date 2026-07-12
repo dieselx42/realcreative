@@ -1,4 +1,4 @@
-import { LeadForm } from "@/components/LeadForm";
+import { ScanStartForm } from "@/components/ScanStartForm";
 import { SCORE_CATEGORIES } from "@/lib/scoring/categories";
 
 export default function HomePage() {
@@ -60,10 +60,11 @@ export default function HomePage() {
                 Score my website
               </h2>
               <p className="mt-1 text-sm text-ink-muted">
-                Takes 30 seconds. Get your score out of 100 instantly.
+                See your score and how you rank against nearby restaurants —
+                instantly, no email required.
               </p>
               <div className="mt-6">
-                <LeadForm />
+                <ScanStartForm />
               </div>
             </div>
           </div>

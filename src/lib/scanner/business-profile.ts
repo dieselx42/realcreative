@@ -66,6 +66,8 @@ export interface BusinessProfileScan {
   source: "dataforseo" | "unavailable";
   error?: string;
   query?: BusinessProfileQuery;
+  /** The matched business's identity, used to find same-category competitors. */
+  matched?: { category?: string; title?: string };
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -273,7 +275,11 @@ async function tryMyBusinessInfo(
       hasWebsite: Boolean(item.url),
       hasNap: Boolean(item.address) && Boolean(item.phone),
     };
-    return { ...buildScan(fields), query: { ...query, matchedBy: "panel" } };
+    return {
+      ...buildScan(fields),
+      query: { ...query, matchedBy: "panel" },
+      matched: { category: item.category },
+    };
   } catch (error) {
     return unavailable(
       error instanceof Error ? error.message : "DataForSEO request failed",
@@ -367,6 +373,7 @@ async function trySearchListings(
     return {
       ...buildScan(fields),
       query: { ...query, matchedBy: best.matchedBy },
+      matched: { category: item.category, title: item.title },
     };
   } catch (error) {
     return unavailable(

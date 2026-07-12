@@ -78,21 +78,22 @@ Effort is rough: **S** = <½ day, **M** = 1–2 days, **L** = 3+ days.
 - ✅ Graceful fallbacks + `meta` diagnostics on every signal
 - ✅ Deployed on Vercel + Supabase; committed to `main`
 
-### Phase 1 — Conversion & positioning *(highest ROI for lead gen)*
-- [ ] **Competitor benchmarking** *(M)* — pull 3–5 nearby same-category
-  restaurants via DataForSEO; show "You score 63; nearby taco spots average 78,"
-  with a rating/review comparison. *Owner's grader leans on "outperform local
-  competition" — this is the most persuasive single addition.*
-- [ ] **Revenue-impact framing** *(M)* — translate gaps into dollars: marketplace
-  commission cost (orders × avg ticket × ~20–30%), lost-order estimate from slow
-  LCP, retention upside. *Owner sells on ROI math; our report should too.*
-- [ ] **Teaser score before the full form** *(M)* — accept restaurant name/URL,
-  show a partial score instantly, gate the full report + recommendations behind
-  the email. *Mirrors Owner's name-only grader; captures far more leads.*
-- [ ] **Book-a-call CTA that works** *(S)* — wire "Schedule a Free Growth Review"
-  to Calendly/Cal.com instead of a dead button.
-- [ ] **Goal quiz qualifier** *(S)* — one question ("What's your #1 goal?") to
-  segment the lead and tailor the report emphasis. *Copies Owner's demo quiz.*
+### Phase 1 — Conversion & positioning ✅ *(shipped)*
+- [x] **Competitor benchmarking** *(M)* — `src/lib/scanner/competitors.ts` pulls
+  nearby same-category restaurants via DataForSEO, shows your rating vs the local
+  average + your rank, and lists the top competitors. *Owner's grader leans on
+  "outperform local competition."*
+- [x] **Revenue-impact framing** *(M)* — `src/lib/scoring/revenue.ts` translates
+  gaps into an estimated $/month range (marketplace commissions, orders lost to a
+  slow site, uncaptured repeat orders), grounded in the review count as a volume
+  proxy, with assumptions surfaced.
+- [x] **Teaser score + email gate** *(M)* — landing collects only name/URL/city;
+  the report shows score + competitor + revenue first, and gates the Top-5 action
+  plan behind the contact capture (`LeadCaptureForm`). Lead is created at the gate.
+- [x] **Book-a-call CTA** *(S)* — CTA links to `NEXT_PUBLIC_CALENDLY_URL` when set,
+  else falls back to mailto.
+- [x] **Goal quiz qualifier** *(S)* — one-question goal selector on the landing
+  form; highlights the matching category ("Your focus") and rides along to the lead.
 
 ### Phase 2 — Scan depth (more accurate & specific)
 - [ ] **Multi-page crawl** *(M)* — also fetch menu + order pages, not just the

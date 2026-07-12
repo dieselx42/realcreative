@@ -116,6 +116,32 @@ export interface ScanResultMeta {
       candidatesConsidered?: number;
     };
   };
+  competitors?: {
+    competitors: { name: string; rating?: number; reviews?: number }[];
+    avgRating?: number;
+    avgReviews?: number;
+    rank?: number;
+    outOf?: number;
+    standing?: "above" | "at" | "below";
+  };
+  revenue?: {
+    opportunities: {
+      key: string;
+      label: string;
+      monthlyLow: number;
+      monthlyHigh: number;
+      basis: string;
+    }[];
+    totalMonthlyLow: number;
+    totalMonthlyHigh: number;
+    annualLow: number;
+    annualHigh: number;
+    assumptions: {
+      avgTicket: number;
+      estMonthlyOrders: number;
+      commissionRate: number;
+    };
+  };
 }
 
 /** The full /api/scan response: the scored result plus diagnostic meta. */

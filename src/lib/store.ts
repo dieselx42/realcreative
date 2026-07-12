@@ -70,8 +70,11 @@ function writeFallback(scans: Record<string, StoredScan>): void {
  * Create a lead, its restaurant, and a scan request in one logical operation.
  * Returns the scan request id, which the results page is keyed on.
  */
+/** The lead data plus an optional goal from the landing quiz. */
+export type LeadInput = LeadFormData & { goal?: string | null };
+
 export async function createScanRequest(
-  data: LeadFormData,
+  data: LeadInput,
 ): Promise<ScanRequest> {
   if (isSupabaseConfigured()) {
     return createScanRequestInSupabase(data);
@@ -99,7 +102,7 @@ export async function listScanRequests(): Promise<ScanRequest[]> {
 
 // --- Fallback implementation ----------------------------------------------
 
-function createScanRequestInFallback(data: LeadFormData): ScanRequest {
+function createScanRequestInFallback(data: LeadInput): ScanRequest {
   const now = new Date().toISOString();
   const scanRequest: ScanRequest = {
     id: randomUUID(),
@@ -119,7 +122,7 @@ function createScanRequestInFallback(data: LeadFormData): ScanRequest {
 // --- Supabase implementation ----------------------------------------------
 
 async function createScanRequestInSupabase(
-  data: LeadFormData,
+  data: LeadInput,
 ): Promise<ScanRequest> {
   const supabase = createServiceSupabaseClient();
 
@@ -135,6 +138,19 @@ async function createScanRequestInSupabase(
     .select("id")
     .single();
   if (leadError) throw leadError;
+
+  // Best-effort: store the landing-quiz goal if the column exists. Done as a
+  // separate update so a database that hasn't run migration 0002 still creates
+  // the lead instead of failing on an unknown column.
+  if (data.goal) {
+    const { error: goalError } = await supabase
+      .from("leads")
+      .update({ goal: data.goal })
+      .eq("id", lead.id);
+    if (goalError) {
+      console.warn("Could not store lead goal (run migration 0002?)", goalError.message);
+    }
+  }
 
   const { data: restaurant, error: restaurantError } = await supabase
     .from("restaurants")

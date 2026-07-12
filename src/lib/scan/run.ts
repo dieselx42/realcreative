@@ -5,11 +5,27 @@ import {
   isAiRecommendationsConfigured,
 } from "@/lib/recommendations/ai";
 import { runBusinessProfileScan } from "@/lib/scanner/business-profile";
+import { runCompetitorScan } from "@/lib/scanner/competitors";
 import { runCrawlScan } from "@/lib/scanner/crawl";
 import { runPerformanceScan } from "@/lib/scanner/performance";
 import { generateScanResult } from "@/lib/scoring/engine";
+import { computeRevenueImpact } from "@/lib/scoring/revenue";
+import type { CategoryKey } from "@/lib/scoring/categories";
 import type { ScannerSignals } from "@/lib/scanner/types";
-import type { ScanResult, ScanResultMeta } from "@/lib/types";
+import type { CrawlFinding, ScanResult, ScanResultMeta } from "@/lib/types";
+
+/** Read whether a labelled crawl finding was detected (ok), by category + label prefix. */
+function findingOk(
+  findings: Partial<Record<CategoryKey, CrawlFinding[]>>,
+  category: CategoryKey,
+  labelStartsWith: string,
+): boolean {
+  const list = findings[category] ?? [];
+  const match = list.find((f) =>
+    f.label.toLowerCase().startsWith(labelStartsWith.toLowerCase()),
+  );
+  return Boolean(match?.ok);
+}
 
 /**
  * The full scan pipeline, extracted so it can run in two places:
@@ -54,6 +70,27 @@ export async function runScanPipeline(
 
   const result = generateScanResult(scanId, websiteUrl, signals);
 
+  // Competitor benchmarking depends on the matched restaurant's category, so it
+  // runs after the business-profile scan (not in the parallel batch above).
+  const competitor = await runCompetitorScan({
+    city,
+    category: business.matched?.category,
+    rating: business.metrics.rating,
+    reviews: business.metrics.reviews,
+    businessName,
+    websiteUrl,
+  });
+
+  // Revenue framing is a pure calc from what the scanners already found.
+  const revenue = computeRevenueImpact({
+    reviews: business.metrics.reviews,
+    hasDirectOrdering: findingOk(crawl.findings, "online_ordering", "Direct"),
+    hasMarketplace: findingOk(crawl.findings, "online_ordering", "Marketplace"),
+    hasEmailCapture: findingOk(crawl.findings, "retention_crm", "Email"),
+    hasLoyalty: findingOk(crawl.findings, "retention_crm", "Loyalty"),
+    lcpMs: performance.metrics.lcpMs,
+  });
+
   let recommendationSource: "claude" | "template" = "template";
   let recommendationError: string | undefined;
   if (isAiRecommendationsConfigured()) {
@@ -69,6 +106,25 @@ export async function runScanPipeline(
           source: business.source,
           metrics: business.metrics,
           findings: business.findings,
+        },
+        localCompetitors:
+          competitor.source === "dataforseo"
+            ? {
+                avgRating: competitor.avgRating,
+                avgReviews: competitor.avgReviews,
+                yourRank: competitor.rank,
+                outOf: competitor.outOf,
+                standing: competitor.standing,
+              }
+            : undefined,
+        estimatedRevenueOpportunity: {
+          monthlyLow: revenue.totalMonthlyLow,
+          monthlyHigh: revenue.totalMonthlyHigh,
+          opportunities: revenue.opportunities.map((o) => ({
+            label: o.label,
+            monthlyLow: o.monthlyLow,
+            monthlyHigh: o.monthlyHigh,
+          })),
         },
       },
     });
@@ -99,6 +155,18 @@ export async function runScanPipeline(
       findings: business.findings,
       query: business.query,
     },
+    competitors:
+      competitor.source === "dataforseo"
+        ? {
+            competitors: competitor.competitors,
+            avgRating: competitor.avgRating,
+            avgReviews: competitor.avgReviews,
+            rank: competitor.rank,
+            outOf: competitor.outOf,
+            standing: competitor.standing,
+          }
+        : undefined,
+    revenue,
   };
 
   return { result, meta };

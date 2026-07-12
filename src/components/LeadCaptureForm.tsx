@@ -1,16 +1,17 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
-import { submitLead, type SubmitLeadState } from "@/app/actions";
+import { captureLead, type CaptureLeadState } from "@/app/actions";
 
-const initialState: SubmitLeadState = { ok: false };
+const initialState: CaptureLeadState = { ok: false };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" className="btn-primary w-full" disabled={pending}>
-      {pending ? "Scoring your website…" : "Get my Growth Score"}
+      {pending ? "Unlocking…" : "Unlock my full report"}
     </button>
   );
 }
@@ -34,42 +35,49 @@ function Field({ label, name, error, children }: FieldProps) {
   );
 }
 
-export function LeadForm() {
-  const [state, formAction] = useFormState(submitLead, initialState);
+export interface LeadCaptureContext {
+  restaurantName: string;
+  websiteUrl: string;
+  city: string;
+  goal?: string;
+}
+
+/**
+ * The email gate on the report. Contact fields are visible; the scan context
+ * (name/website/city/goal) rides along as hidden inputs so the server can
+ * persist a complete lead. On success, `onUnlock` reveals the action plan.
+ */
+export function LeadCaptureForm({
+  context,
+  onUnlock,
+}: {
+  context: LeadCaptureContext;
+  onUnlock: () => void;
+}) {
+  const [state, formAction] = useFormState(captureLead, initialState);
   const errors = state.errors ?? {};
+
+  useEffect(() => {
+    if (state.ok) onUnlock();
+  }, [state.ok, onUnlock]);
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <input type="hidden" name="restaurantName" value={context.restaurantName} />
+      <input type="hidden" name="websiteUrl" value={context.websiteUrl} />
+      <input type="hidden" name="city" value={context.city} />
+      {context.goal ? (
+        <input type="hidden" name="goal" value={context.goal} />
+      ) : null}
+
       {state.formError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {state.formError}
         </div>
       ) : null}
 
-      <Field label="Restaurant name" name="restaurantName" error={errors.restaurantName}>
-        <input
-          id="restaurantName"
-          name="restaurantName"
-          type="text"
-          className="field-input"
-          placeholder="Bella's Trattoria"
-          autoComplete="organization"
-        />
-      </Field>
-
-      <Field label="Website URL" name="websiteUrl" error={errors.websiteUrl}>
-        <input
-          id="websiteUrl"
-          name="websiteUrl"
-          type="text"
-          inputMode="url"
-          className="field-input"
-          placeholder="bellastrattoria.com"
-        />
-      </Field>
-
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Contact name" name="contactName" error={errors.contactName}>
+        <Field label="Your name" name="contactName" error={errors.contactName}>
           <input
             id="contactName"
             name="contactName"
@@ -79,7 +87,6 @@ export function LeadForm() {
             autoComplete="name"
           />
         </Field>
-
         <Field label="Email" name="email" error={errors.email}>
           <input
             id="email"
@@ -103,20 +110,6 @@ export function LeadForm() {
             autoComplete="tel"
           />
         </Field>
-
-        <Field label="City" name="city" error={errors.city}>
-          <input
-            id="city"
-            name="city"
-            type="text"
-            className="field-input"
-            placeholder="Austin, TX"
-            autoComplete="address-level2"
-          />
-        </Field>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="Number of locations"
           name="numberOfLocations"
@@ -131,26 +124,17 @@ export function LeadForm() {
             className="field-input"
           />
         </Field>
-
-        <Field
-          label="Current online ordering provider"
-          name="onlineOrderingProvider"
-          error={errors.onlineOrderingProvider}
-        >
-          <input
-            id="onlineOrderingProvider"
-            name="onlineOrderingProvider"
-            type="text"
-            className="field-input"
-            placeholder="Toast, DoorDash… (optional)"
-          />
-        </Field>
       </div>
 
-      <SubmitButton />
+      <input
+        type="hidden"
+        name="onlineOrderingProvider"
+        value=""
+      />
 
+      <SubmitButton />
       <p className="text-center text-xs text-ink-muted">
-        No credit card. We&apos;ll email your full Growth Score report.
+        We&apos;ll email your full report and a prioritized action plan.
       </p>
     </form>
   );

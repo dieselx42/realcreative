@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import { LeadCaptureForm } from "@/components/LeadCaptureForm";
 import { ScoreDial } from "@/components/ScoreDial";
+import { GOAL_OPTIONS } from "@/lib/validation";
 import type {
   CrawlFinding,
   PerformanceMetrics,
@@ -16,6 +18,7 @@ interface ResultsViewProps {
   websiteUrl: string;
   businessName?: string;
   city?: string;
+  goal?: string;
 }
 
 const SCAN_STEPS = [
@@ -23,8 +26,10 @@ const SCAN_STEPS = [
   "Checking mobile performance…",
   "Looking for online ordering…",
   "Reviewing local SEO & reviews…",
-  "Scoring customer capture…",
+  "Comparing you to nearby restaurants…",
 ];
+
+const CALENDLY_URL = process.env.NEXT_PUBLIC_CALENDLY_URL;
 
 type Tone = "good" | "ni" | "poor";
 
@@ -35,12 +40,9 @@ function toneClass(tone: Tone): string {
 }
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
-/**
- * Renders the real Core Web Vitals from PageSpeed as color-graded chips, using
- * Google's good / needs-improvement / poor thresholds. These are measured
- * values — seeing them makes it clear the Website Performance score is real.
- */
+/** Core Web Vitals from PageSpeed as color-graded chips (Google thresholds). */
 function PerformanceVitals({ metrics }: { metrics: PerformanceMetrics }) {
   const items: { label: string; value: string; tone: Tone }[] = [];
 
@@ -90,7 +92,7 @@ function PerformanceVitals({ metrics }: { metrics: PerformanceMetrics }) {
   );
 }
 
-/** Renders detected/missing features from the homepage crawl as chips. */
+/** Detected/missing features from the homepage crawl as chips. */
 function CrawlFindings({ findings }: { findings: CrawlFinding[] }) {
   if (findings.length === 0) return null;
   return (
@@ -142,31 +144,149 @@ function LiveBadge({
   );
 }
 
+/** How you stack up against same-category restaurants nearby — the hook. */
+function CompetitorPanel({
+  data,
+  rating,
+}: {
+  data: NonNullable<ScanResultMeta["competitors"]>;
+  rating?: number;
+}) {
+  const standingCopy =
+    data.standing === "above"
+      ? { text: "ahead of", tone: "text-green-700" }
+      : data.standing === "below"
+        ? { text: "behind", tone: "text-red-600" }
+        : { text: "in line with", tone: "text-ink" };
+
+  return (
+    <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-ink">
+        How you compare locally
+        <LiveBadge label="Live Google data" tone="amber" />
+      </h2>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Your rating
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-ink">
+            {typeof rating === "number" ? `${rating.toFixed(1)}★` : "—"}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Local average
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-ink">
+            {typeof data.avgRating === "number" ? `${data.avgRating.toFixed(1)}★` : "—"}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            Your rank
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-ink">
+            {data.rank && data.outOf ? `#${data.rank} of ${data.outOf}` : "—"}
+          </div>
+        </div>
+      </div>
+
+      {typeof rating === "number" && typeof data.avgRating === "number" ? (
+        <p className="mt-4 text-sm text-ink-soft">
+          You&apos;re{" "}
+          <span className={`font-semibold ${standingCopy.tone}`}>
+            {standingCopy.text}
+          </span>{" "}
+          the {data.avgReviews ? `${data.avgReviews}-review ` : ""}local average of
+          nearby restaurants in your category.
+        </p>
+      ) : null}
+
+      {data.competitors.length > 0 ? (
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+          {data.competitors.map((c, i) => (
+            <div
+              key={`${c.name}-${i}`}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 text-sm last:border-b-0"
+            >
+              <span className="truncate text-ink">{c.name}</span>
+              <span className="flex-none font-medium text-ink-soft">
+                {typeof c.rating === "number" ? `${c.rating.toFixed(1)}★` : "—"}
+                <span className="ml-2 text-ink-muted">
+                  {c.reviews != null ? `${c.reviews.toLocaleString()} reviews` : ""}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Translates the score gaps into an estimated dollar opportunity. */
+function RevenuePanel({ data }: { data: NonNullable<ScanResultMeta["revenue"]> }) {
+  if (data.opportunities.length === 0) return null;
+  return (
+    <section className="mt-8 rounded-2xl border border-brand-200 bg-brand-50 p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-ink">
+        What these gaps may be costing you
+      </h2>
+      <p className="mt-2 text-3xl font-extrabold text-brand-700">
+        {money(data.totalMonthlyLow)}–{money(data.totalMonthlyHigh)}
+        <span className="text-base font-semibold text-ink-soft"> / month</span>
+      </p>
+      <p className="mt-1 text-sm text-ink-soft">
+        Roughly {money(data.annualLow)}–{money(data.annualHigh)} a year in
+        recoverable revenue.
+      </p>
+
+      <ul className="mt-4 space-y-2">
+        {data.opportunities.map((o) => (
+          <li
+            key={o.key}
+            className="rounded-xl border border-brand-100 bg-white p-3 text-sm"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-ink">{o.label}</span>
+              <span className="flex-none font-semibold text-brand-700">
+                {money(o.monthlyLow)}–{money(o.monthlyHigh)}/mo
+              </span>
+            </div>
+            <p className="mt-1 text-ink-soft">{o.basis}</p>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 text-xs text-ink-muted">
+        Estimates based on ~{data.assumptions.estMonthlyOrders.toLocaleString()}{" "}
+        online orders/mo at a {money(data.assumptions.avgTicket)} average ticket.
+        Book a review for a figure using your real numbers.
+      </p>
+    </section>
+  );
+}
+
 /**
- * Plays a "scanning" animation while the real scan runs in /api/scan/[id],
- * then reveals the result. The animation holds on its last step until the
- * result arrives (PageSpeed can take several seconds), and surfaces a retry if
- * the request fails.
- *
- * TODO: When scans run as real background jobs, poll scan_requests status and
- *   stream real progress instead of stepping through fixed labels.
+ * Plays a "scanning" animation while the real scan runs, then reveals the
+ * report: score, local comparison, revenue impact, category breakdown, and a
+ * gated action plan (unlocked by capturing the lead's email).
  */
 export function ResultsView({
   scanId,
   websiteUrl,
   businessName,
   city,
+  goal,
 }: ResultsViewProps) {
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [meta, setMeta] = useState<ScanResultMeta | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [unlocked, setUnlocked] = useState(false);
 
-  // Fetch the scored result, polling while a background job is still running.
-  // The API returns {status:"processing"} (202) until the Trigger.dev job (when
-  // configured) persists the result; otherwise it runs inline and returns the
-  // result on the first call.
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
@@ -209,16 +329,15 @@ export function ResultsView({
     };
   }, [scanId, websiteUrl, businessName, city, attempt]);
 
-  // Advance the animation; hold on the final step until the result is in.
   useEffect(() => {
     const isLastStep = step >= SCAN_STEPS.length - 1;
-    if (isLastStep && result) return;
-    if (isLastStep && !result) return; // waiting on the fetch
+    if (isLastStep) return;
     const timer = setTimeout(() => setStep((s) => s + 1), 700);
     return () => clearTimeout(timer);
   }, [step, result]);
 
   const revealed = result && step >= SCAN_STEPS.length - 1;
+  const goalCategory = GOAL_OPTIONS.find((o) => o.value === goal)?.category;
 
   if (failed) {
     return (
@@ -249,9 +368,7 @@ export function ResultsView({
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-lg">
           <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600" />
-          <h1 className="text-lg font-bold text-ink">
-            Scoring your website
-          </h1>
+          <h1 className="text-lg font-bold text-ink">Scoring your website</h1>
           <p className="mt-1 truncate text-sm text-ink-muted">{websiteUrl}</p>
           <ul className="mt-6 space-y-2 text-left">
             {SCAN_STEPS.map((label, index) => (
@@ -279,7 +396,6 @@ export function ResultsView({
     );
   }
 
-  // `revealed` implies a non-null result; this guard narrows the type for TS.
   if (!result) return null;
 
   const topRecommendations = result.recommendations.slice(0, 5);
@@ -305,16 +421,23 @@ export function ResultsView({
               Your Restaurant Growth Score
             </h1>
             <p className="mt-2 max-w-xl text-ink-soft">
-              This is a preview score based on {websiteUrl}. Below are your
-              category breakdowns and the five highest-impact fixes to win back
-              orders.
-            </p>
-            <p className="mt-4 rounded-lg bg-brand-50 px-4 py-3 text-sm text-brand-800">
-              Preview scores are estimates. Book a free review to get your
-              verified score and a tailored action plan.
+              A preview score based on {websiteUrl}. See how you compare to nearby
+              restaurants, what the gaps may be costing you, and the highest-impact
+              fixes to win back orders.
             </p>
           </div>
         </div>
+
+        {/* Competitor benchmarking */}
+        {meta?.competitors ? (
+          <CompetitorPanel
+            data={meta.competitors}
+            rating={meta.businessProfile?.metrics.rating}
+          />
+        ) : null}
+
+        {/* Revenue impact */}
+        {meta?.revenue ? <RevenuePanel data={meta.revenue} /> : null}
 
         {/* Category scores */}
         <section className="mt-8">
@@ -337,14 +460,24 @@ export function ResultsView({
                 meta?.businessProfile?.source === "dataforseo"
                   ? meta.businessProfile.findings[category.key]
                   : undefined;
+              const isGoal = category.key === goalCategory;
               return (
                 <div
                   key={category.key}
-                  className="rounded-xl border border-slate-200 bg-white p-4"
+                  className={`rounded-xl border bg-white p-4 ${
+                    isGoal
+                      ? "border-brand-400 ring-1 ring-brand-200"
+                      : "border-slate-200"
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
                       {category.label}
+                      {isGoal ? (
+                        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                          Your focus
+                        </span>
+                      ) : null}
                       {livePerf ? (
                         <LiveBadge label="Live PageSpeed" tone="green" />
                       ) : null}
@@ -383,30 +516,75 @@ export function ResultsView({
           </div>
         </section>
 
-        {/* Top recommendations */}
+        {/* Recommendations — gated behind the email capture */}
         <section className="mt-10">
           <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-ink">
-            Top 5 recommendations
+            Your Top 5 fixes
             {meta?.recommendations?.source === "claude" ? (
               <LiveBadge label="AI-tailored" tone="green" />
             ) : null}
           </h2>
-          <ol className="mt-4 space-y-3">
-            {topRecommendations.map((rec) => (
-              <li
-                key={rec.category}
-                className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4"
-              >
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
-                  {rec.priority}
-                </span>
-                <div>
-                  <h3 className="font-semibold text-ink">{rec.title}</h3>
-                  <p className="mt-1 text-sm text-ink-soft">{rec.detail}</p>
+
+          {unlocked ? (
+            <ol className="mt-4 space-y-3">
+              {topRecommendations.map((rec) => (
+                <li
+                  key={rec.category}
+                  className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4"
+                >
+                  <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
+                    {rec.priority}
+                  </span>
+                  <div>
+                    <h3 className="font-semibold text-ink">{rec.title}</h3>
+                    <p className="mt-1 text-sm text-ink-soft">{rec.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="mt-4 grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-2 lg:items-center">
+              <div>
+                <div
+                  aria-hidden
+                  className="pointer-events-none select-none space-y-2"
+                >
+                  {topRecommendations.slice(0, 3).map((rec, i) => (
+                    <div
+                      key={rec.category}
+                      className={`rounded-lg border border-slate-200 bg-slate-50 p-3 ${
+                        i === 0 ? "" : "blur-sm"
+                      }`}
+                    >
+                      <h3 className="text-sm font-semibold text-ink">
+                        {i === 0 ? rec.title : "•••••••••••••••••••"}
+                      </h3>
+                      <p className="mt-1 text-xs text-ink-soft">
+                        {i === 0
+                          ? rec.detail
+                          : "••••••••••••••••••••••••••••••••••••••••••••"}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              </li>
-            ))}
-          </ol>
+                <p className="mt-4 text-sm font-medium text-ink">
+                  Enter your details to unlock all 5 prioritized fixes for{" "}
+                  {businessName ?? "your restaurant"}.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <LeadCaptureForm
+                  context={{
+                    restaurantName: businessName ?? "",
+                    websiteUrl,
+                    city: city ?? "",
+                    goal,
+                  }}
+                  onUnlock={() => setUnlocked(true)}
+                />
+              </div>
+            </div>
+          )}
         </section>
 
         {/* CTA */}
@@ -419,7 +597,12 @@ export function ResultsView({
             report and build a prioritized plan for your restaurant.
           </p>
           <a
-            href="mailto:hello@restaurantgrowthscore.com?subject=Schedule%20a%20Free%20Growth%20Review"
+            href={
+              CALENDLY_URL ??
+              "mailto:hello@restaurantgrowthscore.com?subject=Schedule%20a%20Free%20Growth%20Review"
+            }
+            target={CALENDLY_URL ? "_blank" : undefined}
+            rel={CALENDLY_URL ? "noopener noreferrer" : undefined}
             className="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-600"
           >
             Schedule a Free Growth Review
