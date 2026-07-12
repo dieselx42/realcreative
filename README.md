@@ -131,6 +131,29 @@ the request path, writes its result to Supabase, and the results page polls for
 it. This requires Supabase (the job and the app are separate processes and need
 a shared database).
 
+### Why (and when) you'd turn this on
+
+A full scan is slow: PageSpeed's Lighthouse audit alone is ~10–25s, plus the
+crawl and DataForSEO lookups. Running that **inline** means it happens during
+the web request while the user waits, and serverless functions have a time
+limit (60s on Vercel Hobby). For low traffic and normal sites this is fine —
+the results page shows a scanning animation and polls until it's done — but a
+slow site or a burst of traffic can push a scan past the limit and kill it.
+
+Moving the scan to a **background job** removes that ceiling: the request
+returns instantly, the heavy work runs on Trigger.dev's infrastructure with no
+tight timeout, and you get retries + a dashboard of every job's status.
+
+**You don't need this to launch.** Turn it on when:
+
+- you're getting enough real traffic that you don't want each scan tying up a
+  serverless function for 20–40s,
+- scans get slower or heavier (e.g. adding a scraping proxy for bot-protected
+  sites, or crawling multiple pages) and start approaching the 60s limit, or
+- you want automatic retries and per-job observability.
+
+Until then, the inline path handles everything and the code below stays dormant.
+
 To enable it:
 
 1. Create a Trigger.dev project and put its ref in `trigger.config.ts` (or set
