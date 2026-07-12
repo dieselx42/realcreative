@@ -65,19 +65,23 @@ export async function runBusinessProfileScan(
   }
 
   const { timeoutMs = DEFAULT_TIMEOUT_MS } = options;
-  const keyword = [context.businessName, context.city]
-    .filter(Boolean)
-    .join(" ");
-  // DataForSEO requires a *recognized* location. A bare city the user typed
-  // (e.g. "Miami") is rejected, and even a country *name* like "United States"
-  // isn't in the business-data location database ("Invalid Field:
-  // 'location_name'"). The reliable default is the numeric location_code —
-  // 2840 = United States (Country) — which is accepted across DataForSEO's
-  // business-data endpoints. The city stays in the search keyword for
-  // disambiguation. For tighter local matching, set DATAFORSEO_LOCATION to a
-  // fully-qualified name (e.g. "Miami,Florida,United States").
-  const task: Record<string, unknown> = { keyword, language_code: "en" };
+
+  // my_business_info returns data only when Google resolves a *single* local
+  // business panel. Two ways to get there:
+  //   - With an explicit city-level location (DATAFORSEO_LOCATION, e.g.
+  //     "Miami,Florida,United States"), Google already pins the locale, so the
+  //     keyword should be just the business name — a cleaner, higher-hit query.
+  //   - Without one, we fall back to a country-wide search (location_code 2840
+  //     = United States, which the business-data endpoints accept — a country
+  //     *name* like "United States" is rejected) and lean on the typed city
+  //     inside the keyword as the only disambiguation signal we have. A common
+  //     restaurant name over the whole US is ambiguous and returns "No Search
+  //     Results" — set DATAFORSEO_LOCATION to fix that.
   const locationName = process.env.DATAFORSEO_LOCATION;
+  const keyword = locationName
+    ? (context.businessName ?? "")
+    : [context.businessName, context.city].filter(Boolean).join(" ");
+  const task: Record<string, unknown> = { keyword, language_code: "en" };
   if (locationName) {
     task.location_name = locationName;
   } else {
