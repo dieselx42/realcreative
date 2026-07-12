@@ -86,7 +86,23 @@ export async function runCrawlScan(
     const response = await fetch(websiteUrl, {
       signal: controller.signal,
       redirect: "follow",
-      headers: { "user-agent": USER_AGENT, accept: "text/html,*/*" },
+      // Send the full set of headers a real Chrome navigation sends. Many bot
+      // filters reject requests missing Accept-Language / Sec-Fetch-* headers.
+      headers: {
+        "user-agent": USER_AGENT,
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.9",
+        "upgrade-insecure-requests": "1",
+        "sec-ch-ua":
+          '"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "none",
+        "sec-fetch-user": "?1",
+      },
       next: { revalidate: 300 },
     });
 
