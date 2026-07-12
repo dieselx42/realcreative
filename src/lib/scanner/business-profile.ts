@@ -69,16 +69,20 @@ export async function runBusinessProfileScan(
     .filter(Boolean)
     .join(" ");
   // DataForSEO requires a *recognized* location. A bare city the user typed
-  // (e.g. "Miami") is rejected — `location_name` must be a full string like
-  // "New York,New York,United States". Rather than guess/geocode, default to a
-  // country-level location (which DataForSEO always accepts) and keep the city
-  // in the search keyword for disambiguation. Override with DATAFORSEO_LOCATION
-  // (e.g. "Miami,Florida,United States") for tighter local results.
-  const task: Record<string, unknown> = {
-    keyword,
-    language_code: "en",
-    location_name: process.env.DATAFORSEO_LOCATION || "United States",
-  };
+  // (e.g. "Miami") is rejected, and even a country *name* like "United States"
+  // isn't in the business-data location database ("Invalid Field:
+  // 'location_name'"). The reliable default is the numeric location_code —
+  // 2840 = United States (Country) — which is accepted across DataForSEO's
+  // business-data endpoints. The city stays in the search keyword for
+  // disambiguation. For tighter local matching, set DATAFORSEO_LOCATION to a
+  // fully-qualified name (e.g. "Miami,Florida,United States").
+  const task: Record<string, unknown> = { keyword, language_code: "en" };
+  const locationName = process.env.DATAFORSEO_LOCATION;
+  if (locationName) {
+    task.location_name = locationName;
+  } else {
+    task.location_code = Number(process.env.DATAFORSEO_LOCATION_CODE) || 2840;
+  }
 
   const auth = Buffer.from(`${login}:${password}`).toString("base64");
   const controller = new AbortController();
