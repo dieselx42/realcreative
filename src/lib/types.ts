@@ -68,3 +68,26 @@ export interface ScanResult {
   recommendations: Recommendation[];
   generatedAt: string;
 }
+
+/** Core Web Vitals captured by the PageSpeed scanner (all optional). */
+export interface PerformanceMetrics {
+  lcpMs?: number;
+  cls?: number;
+  tbtMs?: number;
+  fcpMs?: number;
+}
+
+/**
+ * Diagnostic metadata returned alongside a scan result by /api/scan, describing
+ * where each real signal came from. Extra to the core scoring types.
+ */
+export interface ScanResultMeta {
+  performance?: {
+    source: "pagespeed" | "unavailable";
+    error?: string;
+    metrics: PerformanceMetrics;
+  };
+}
+
+/** The full /api/scan response: the scored result plus diagnostic meta. */
+export type ScanApiResponse = ScanResult & { meta?: ScanResultMeta };

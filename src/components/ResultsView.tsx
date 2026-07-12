@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { ScoreDial } from "@/components/ScoreDial";
-import type { ScanResult } from "@/lib/types";
+import type {
+  PerformanceMetrics,
+  ScanApiResponse,
+  ScanResult,
+  ScanResultMeta,
+} from "@/lib/types";
 
 interface ResultsViewProps {
   scanId: string;
@@ -18,6 +23,70 @@ const SCAN_STEPS = [
   "Scoring customer capture…",
 ];
 
+type Tone = "good" | "ni" | "poor";
+
+function toneClass(tone: Tone): string {
+  if (tone === "good") return "border-green-200 bg-green-50 text-green-700";
+  if (tone === "ni") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-red-200 bg-red-50 text-red-700";
+}
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+
+/**
+ * Renders the real Core Web Vitals from PageSpeed as color-graded chips, using
+ * Google's good / needs-improvement / poor thresholds. These are measured
+ * values — seeing them makes it clear the Website Performance score is real.
+ */
+function PerformanceVitals({ metrics }: { metrics: PerformanceMetrics }) {
+  const items: { label: string; value: string; tone: Tone }[] = [];
+
+  if (typeof metrics.lcpMs === "number") {
+    items.push({
+      label: "LCP",
+      value: seconds(metrics.lcpMs),
+      tone: metrics.lcpMs <= 2500 ? "good" : metrics.lcpMs <= 4000 ? "ni" : "poor",
+    });
+  }
+  if (typeof metrics.fcpMs === "number") {
+    items.push({
+      label: "FCP",
+      value: seconds(metrics.fcpMs),
+      tone: metrics.fcpMs <= 1800 ? "good" : metrics.fcpMs <= 3000 ? "ni" : "poor",
+    });
+  }
+  if (typeof metrics.tbtMs === "number") {
+    items.push({
+      label: "TBT",
+      value: `${Math.round(metrics.tbtMs)}ms`,
+      tone: metrics.tbtMs <= 200 ? "good" : metrics.tbtMs <= 600 ? "ni" : "poor",
+    });
+  }
+  if (typeof metrics.cls === "number") {
+    items.push({
+      label: "CLS",
+      value: metrics.cls.toFixed(2),
+      tone: metrics.cls <= 0.1 ? "good" : metrics.cls <= 0.25 ? "ni" : "poor",
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item.label}
+          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium ${toneClass(item.tone)}`}
+        >
+          <span className="opacity-70">{item.label}</span>
+          {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Plays a "scanning" animation while the real scan runs in /api/scan/[id],
  * then reveals the result. The animation holds on its last step until the
@@ -30,6 +99,7 @@ const SCAN_STEPS = [
 export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [meta, setMeta] = useState<ScanResultMeta | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -41,10 +111,12 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
     fetch(`/api/scan/${scanId}?${query.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Scan failed (${res.status})`);
-        return res.json() as Promise<ScanResult>;
+        return res.json() as Promise<ScanApiResponse>;
       })
       .then((data) => {
-        if (!cancelled) setResult(data);
+        if (cancelled) return;
+        setResult(data);
+        setMeta(data.meta ?? null);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -169,14 +241,25 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
               const pct = Math.round(
                 (category.score / category.maxPoints) * 100,
               );
+              const livePerf =
+                category.key === "website_performance" &&
+                meta?.performance?.source === "pagespeed"
+                  ? meta.performance
+                  : null;
               return (
                 <div
                   key={category.key}
                   className="rounded-xl border border-slate-200 bg-white p-4"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-ink">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                       {category.label}
+                      {livePerf ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          Live PageSpeed
+                        </span>
+                      ) : null}
                     </span>
                     <span className="text-sm font-semibold text-ink-soft">
                       {category.score}
@@ -191,6 +274,9 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
+                  {livePerf ? (
+                    <PerformanceVitals metrics={livePerf.metrics} />
+                  ) : null}
                 </div>
               );
             })}
