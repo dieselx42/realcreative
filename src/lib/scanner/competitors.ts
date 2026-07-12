@@ -43,6 +43,8 @@ export interface CompetitorScan {
   outOf?: number;
   /** How this restaurant compares on rating: "above" | "at" | "below" average. */
   standing?: "above" | "at" | "below";
+  /** Human label for the category compared against, e.g. "Mexican restaurant". */
+  categoryLabel?: string;
 }
 
 export interface CompetitorInput {
@@ -59,9 +61,38 @@ export interface CompetitorInput {
 interface ListingItem {
   title?: string;
   category?: string;
+  additional_categories?: string[];
   url?: string;
   domain?: string;
   rating?: { value?: number; votes_count?: number };
+}
+
+/**
+ * DataForSEO category slugs are snake_case (e.g. "mexican_restaurant"). The
+ * matched business's category can come back as a display string ("Mexican
+ * restaurant"), so normalize both sides to a slug before filtering/comparing.
+ */
+function toSlug(category: string): string {
+  return category
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** "mexican_restaurant" -> "Mexican restaurant" for display. */
+function toLabel(slug: string): string {
+  const words = slug.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Does a listing share the subject's category (primary or additional)? */
+function sharesCategory(item: ListingItem, targetSlug: string): boolean {
+  const slugs = [item.category, ...(item.additional_categories ?? [])]
+    .filter((c): c is string => typeof c === "string")
+    .map(toSlug);
+  return slugs.includes(targetSlug);
 }
 
 interface ListingsResponse {
@@ -104,11 +135,12 @@ export async function runCompetitorScan(
   const auth = Buffer.from(`${login}:${password}`).toString("base64");
   const radiusKm =
     Number(process.env.DATAFORSEO_COMPETITOR_RADIUS_KM) || DEFAULT_RADIUS_KM;
+  const categorySlug = toSlug(input.category);
   const task: Record<string, unknown> = {
-    categories: [input.category],
+    categories: [categorySlug],
     location_coordinate: `${point.lat},${point.lng},${radiusKm}`,
     order_by: ["rating.votes_count,desc"],
-    limit: 30,
+    limit: 100,
   };
 
   const controller = new AbortController();
@@ -130,7 +162,7 @@ export async function runCompetitorScan(
     }
 
     const items = dfsTask.result?.[0]?.items ?? [];
-    return summarize(items, input);
+    return summarize(items, input, categorySlug);
   } catch (error) {
     return unavailable(
       error instanceof Error ? error.message : "DataForSEO competitor request failed",
@@ -140,19 +172,28 @@ export async function runCompetitorScan(
   }
 }
 
-function summarize(items: ListingItem[], input: CompetitorInput): CompetitorScan {
+function summarize(
+  items: ListingItem[],
+  input: CompetitorInput,
+  categorySlug: string,
+): CompetitorScan {
   const targetHost = hostOf(input.websiteUrl);
   const targetName = norm(input.businessName);
+  const categoryLabel = toLabel(categorySlug);
 
-  // Exclude the subject restaurant itself (by domain, else by exact name) and
-  // any listing missing a rating (can't benchmark on it).
+  // Keep only genuine same-category peers. The DataForSEO `categories` filter is
+  // unreliable (it can return everything near the point ordered by reviews —
+  // malls, big chains), so we enforce the category client-side. Exclude the
+  // subject itself (by domain, else exact name) and anything without a rating.
   const competitors = items
     .filter((it) => {
+      if (!sharesCategory(it, categorySlug)) return false;
+      if (typeof it.rating?.value !== "number") return false;
       const host = hostOf(it.url || it.domain);
       const isSelf =
         (targetHost && host && host === targetHost) ||
         (targetName && norm(it.title) === targetName);
-      return !isSelf && typeof it.rating?.value === "number";
+      return !isSelf;
     })
     .map((it) => ({
       name: it.title ?? "Nearby restaurant",
@@ -162,7 +203,9 @@ function summarize(items: ListingItem[], input: CompetitorInput): CompetitorScan
     }));
 
   if (competitors.length < 2) {
-    return unavailable("Not enough nearby competitors to compare");
+    return unavailable(
+      `Not enough nearby ${categoryLabel} competitors to compare`,
+    );
   }
 
   const ratings = competitors.map((c) => c.rating ?? 0);
@@ -193,5 +236,6 @@ function summarize(items: ListingItem[], input: CompetitorInput): CompetitorScan
     rank,
     outOf: typeof input.rating === "number" ? competitors.length + 1 : undefined,
     standing,
+    categoryLabel,
   };
 }

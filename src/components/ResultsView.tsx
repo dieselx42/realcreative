@@ -159,10 +159,14 @@ function CompetitorPanel({
         ? { text: "behind", tone: "text-red-600" }
         : { text: "in line with", tone: "text-ink" };
 
+  const peerLabel = data.categoryLabel
+    ? `${data.categoryLabel.toLowerCase()}s nearby`
+    : "nearby restaurants in your category";
+
   return (
     <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="flex flex-wrap items-center gap-2 text-lg font-bold text-ink">
-        How you compare locally
+        How you compare to {peerLabel}
         <LiveBadge label="Live Google data" tone="amber" />
       </h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -194,12 +198,15 @@ function CompetitorPanel({
 
       {typeof rating === "number" && typeof data.avgRating === "number" ? (
         <p className="mt-4 text-sm text-ink-soft">
-          You&apos;re{" "}
+          Your {rating.toFixed(1)}★ is{" "}
           <span className={`font-semibold ${standingCopy.tone}`}>
             {standingCopy.text}
           </span>{" "}
-          the {data.avgReviews ? `${data.avgReviews}-review ` : ""}local average of
-          nearby restaurants in your category.
+          the {data.avgRating.toFixed(1)}★ average of {peerLabel}
+          {data.avgReviews
+            ? ` (who average ${data.avgReviews.toLocaleString()} reviews each)`
+            : ""}
+          .
         </p>
       ) : null}
 

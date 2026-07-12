@@ -123,6 +123,7 @@ export interface ScanResultMeta {
     rank?: number;
     outOf?: number;
     standing?: "above" | "at" | "below";
+    categoryLabel?: string;
   };
   revenue?: {
     opportunities: {

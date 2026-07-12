@@ -164,6 +164,7 @@ export async function runScanPipeline(
             rank: competitor.rank,
             outOf: competitor.outOf,
             standing: competitor.standing,
+            categoryLabel: competitor.categoryLabel,
           }
         : undefined,
     revenue,
