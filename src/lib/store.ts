@@ -159,9 +159,17 @@ async function createScanRequestInSupabase(
   return mapScanRow(scan);
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function getScanRequestFromSupabase(
   id: string,
 ): Promise<ScanRequest | null> {
+  // scan_requests.id is a uuid column; a non-uuid id (e.g. a hand-typed or
+  // stale link) would make Postgres reject the query. Treat it as "not found"
+  // so callers can fall back gracefully instead of surfacing a 500.
+  if (!UUID_RE.test(id)) return null;
+
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("scan_requests")
