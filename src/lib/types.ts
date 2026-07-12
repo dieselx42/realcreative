@@ -106,6 +106,12 @@ export interface ScanResultMeta {
     error?: string;
     metrics: { rating?: number; reviews?: number };
     findings: Partial<Record<CategoryKey, CrawlFinding[]>>;
+    query?: {
+      keyword: string;
+      locationName?: string;
+      locationCode?: number;
+      cityResolved: boolean;
+    };
   };
 }
 

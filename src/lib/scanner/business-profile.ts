@@ -34,18 +34,37 @@ export interface BusinessProfileFinding {
   ok: boolean;
 }
 
+/** Exactly what was sent to DataForSEO — surfaced in meta for debugging. */
+export interface BusinessProfileQuery {
+  keyword: string;
+  locationName?: string;
+  locationCode?: number;
+  cityResolved: boolean;
+}
+
 export interface BusinessProfileScan {
   signals: ScannerSignals; // { reputation, local_seo } when available
   findings: Partial<Record<CategoryKey, BusinessProfileFinding[]>>;
   metrics: { rating?: number; reviews?: number };
   source: "dataforseo" | "unavailable";
   error?: string;
+  query?: BusinessProfileQuery;
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
-function unavailable(error: string): BusinessProfileScan {
-  return { signals: {}, findings: {}, metrics: {}, source: "unavailable", error };
+function unavailable(
+  error: string,
+  query?: BusinessProfileQuery,
+): BusinessProfileScan {
+  return {
+    signals: {},
+    findings: {},
+    metrics: {},
+    source: "unavailable",
+    error,
+    query,
+  };
 }
 
 interface RunOptions {
@@ -95,14 +114,21 @@ export async function runBusinessProfileScan(
     : [businessName, context.city].filter(Boolean).join(" ");
 
   const task: Record<string, unknown> = { keyword, language_code: "en" };
+  const query: BusinessProfileQuery = {
+    keyword,
+    cityResolved: resolvedCode != null,
+  };
   if (explicitLocation) {
     task.location_name = explicitLocation;
+    query.locationName = explicitLocation;
   } else if (resolvedCode != null) {
     task.location_code = resolvedCode;
+    query.locationCode = resolvedCode;
   } else {
-    task.location_code = Number(process.env.DATAFORSEO_LOCATION_CODE) || 2840;
+    const fallback = Number(process.env.DATAFORSEO_LOCATION_CODE) || 2840;
+    task.location_code = fallback;
+    query.locationCode = fallback;
   }
-
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -120,7 +146,7 @@ export async function runBusinessProfileScan(
     });
 
     if (!response.ok) {
-      return unavailable(`DataForSEO responded ${response.status}`);
+      return unavailable(`DataForSEO responded ${response.status}`, query);
     }
 
     const json = (await response.json()) as DataForSeoResponse;
@@ -128,18 +154,20 @@ export async function runBusinessProfileScan(
     if (!dfsTask || dfsTask.status_code !== 20000) {
       return unavailable(
         dfsTask?.status_message ?? "DataForSEO task failed",
+        query,
       );
     }
 
     const item = dfsTask.result?.[0]?.items?.[0];
     if (!item) {
-      return unavailable("No Google Business Profile found");
+      return unavailable("No Google Business Profile found", query);
     }
 
-    return mapItem(item, context);
+    return { ...mapItem(item, context), query };
   } catch (error) {
     return unavailable(
       error instanceof Error ? error.message : "DataForSEO request failed",
+      query,
     );
   } finally {
     clearTimeout(timer);

@@ -94,6 +94,7 @@ export async function runScanPipeline(
       error: business.error,
       metrics: business.metrics,
       findings: business.findings,
+      query: business.query,
     },
   };
 
