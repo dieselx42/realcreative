@@ -111,6 +111,8 @@ export interface ScanResultMeta {
       locationName?: string;
       locationCode?: number;
       cityResolved: boolean;
+      matchedBy?: "panel" | "website" | "name+city" | "name";
+      candidatesConsidered?: number;
     };
   };
 }
