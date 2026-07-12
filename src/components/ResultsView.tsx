@@ -14,6 +14,8 @@ import type {
 interface ResultsViewProps {
   scanId: string;
   websiteUrl: string;
+  businessName?: string;
+  city?: string;
 }
 
 const SCAN_STEPS = [
@@ -111,12 +113,25 @@ function CrawlFindings({ findings }: { findings: CrawlFinding[] }) {
 }
 
 /** Small "live data" pill shown on categories backed by a real scanner. */
-function LiveBadge({ label, tone }: { label: string; tone: "green" | "blue" }) {
+function LiveBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "green" | "blue" | "amber";
+}) {
   const cls =
     tone === "green"
       ? "bg-green-50 text-green-700"
-      : "bg-sky-50 text-sky-700";
-  const dot = tone === "green" ? "bg-green-500" : "bg-sky-500";
+      : tone === "blue"
+        ? "bg-sky-50 text-sky-700"
+        : "bg-amber-50 text-amber-700";
+  const dot =
+    tone === "green"
+      ? "bg-green-500"
+      : tone === "blue"
+        ? "bg-sky-500"
+        : "bg-amber-500";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
@@ -136,7 +151,12 @@ function LiveBadge({ label, tone }: { label: string; tone: "green" | "blue" }) {
  * TODO: When scans run as real background jobs, poll scan_requests status and
  *   stream real progress instead of stepping through fixed labels.
  */
-export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
+export function ResultsView({
+  scanId,
+  websiteUrl,
+  businessName,
+  city,
+}: ResultsViewProps) {
   const [step, setStep] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [meta, setMeta] = useState<ScanResultMeta | null>(null);
@@ -148,6 +168,8 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
     let cancelled = false;
     setFailed(false);
     const query = new URLSearchParams({ u: websiteUrl });
+    if (businessName) query.set("n", businessName);
+    if (city) query.set("c", city);
     fetch(`/api/scan/${scanId}?${query.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Scan failed (${res.status})`);
@@ -164,7 +186,7 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scanId, websiteUrl, attempt]);
+  }, [scanId, websiteUrl, businessName, city, attempt]);
 
   // Advance the animation; hold on the final step until the result is in.
   useEffect(() => {
@@ -290,6 +312,10 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                 meta?.crawl?.source === "crawl"
                   ? meta.crawl.findings[category.key]
                   : undefined;
+              const businessFindings =
+                meta?.businessProfile?.source === "dataforseo"
+                  ? meta.businessProfile.findings[category.key]
+                  : undefined;
               return (
                 <div
                   key={category.key}
@@ -303,6 +329,9 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                       ) : null}
                       {crawlFindings ? (
                         <LiveBadge label="Live site scan" tone="blue" />
+                      ) : null}
+                      {businessFindings ? (
+                        <LiveBadge label="Live Google data" tone="amber" />
                       ) : null}
                     </span>
                     <span className="text-sm font-semibold text-ink-soft">
@@ -323,6 +352,9 @@ export function ResultsView({ scanId, websiteUrl }: ResultsViewProps) {
                   ) : null}
                   {crawlFindings ? (
                     <CrawlFindings findings={crawlFindings} />
+                  ) : null}
+                  {businessFindings ? (
+                    <CrawlFindings findings={businessFindings} />
                   ) : null}
                 </div>
               );

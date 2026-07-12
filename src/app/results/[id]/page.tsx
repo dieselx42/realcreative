@@ -5,7 +5,7 @@ import { getScanRequest } from "@/lib/store";
 
 interface ResultsPageProps {
   params: { id: string };
-  searchParams: { u?: string };
+  searchParams: { u?: string; n?: string; c?: string };
 }
 
 export default async function ResultsPage({
@@ -23,7 +23,14 @@ export default async function ResultsPage({
   }
 
   // The score is fetched client-side from /api/scan/[id] so the (potentially
-  // slow) PageSpeed call runs behind the scan animation instead of blocking
-  // this render.
-  return <ResultsView scanId={params.id} websiteUrl={websiteUrl} />;
+  // slow) scanner calls run behind the scan animation instead of blocking this
+  // render. Business name + city are forwarded for the Business Profile lookup.
+  return (
+    <ResultsView
+      scanId={params.id}
+      websiteUrl={websiteUrl}
+      businessName={searchParams.n}
+      city={searchParams.c}
+    />
+  );
 }

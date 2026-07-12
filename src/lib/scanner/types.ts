@@ -8,6 +8,7 @@ import type { CategoryKey } from "@/lib/scoring/categories";
 
 export interface ScanContext {
   websiteUrl: string;
+  businessName?: string;
   city?: string;
   onlineOrderingProvider?: string | null;
 }

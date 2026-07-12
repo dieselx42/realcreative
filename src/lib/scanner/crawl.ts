@@ -20,8 +20,11 @@ import type { Scanner, ScanContext, ScannerSignals } from "@/lib/scanner/types";
  */
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+// Use a real browser UA: many restaurant sites (Squarespace/Wix/Cloudflare)
+// serve a 403 or a JS challenge to unknown bot user-agents, which would make
+// the crawl come back empty. A standard Chrome UA gets the real HTML.
 const USER_AGENT =
-  "Mozilla/5.0 (compatible; RestaurantGrowthScoreBot/1.0; +https://restaurantgrowthscore.com/bot)";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 // Providers are matched against link hrefs (domains), not arbitrary page text,
 // to avoid false positives like "square" in "Times Square" or "slice of pizza".

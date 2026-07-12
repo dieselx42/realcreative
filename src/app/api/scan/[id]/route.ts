@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { runBusinessProfileScan } from "@/lib/scanner/business-profile";
 import { runCrawlScan } from "@/lib/scanner/crawl";
 import { runPerformanceScan } from "@/lib/scanner/performance";
 import { generateScanResult } from "@/lib/scoring/engine";
@@ -38,6 +39,10 @@ export async function GET(
   const url = new URL(request.url);
   const scanRequest = await getScanRequest(params.id);
   const websiteUrl = scanRequest?.websiteUrl ?? url.searchParams.get("u");
+  // Business name + city (for the Google Business Profile lookup) are passed
+  // through as query params by the results page; see submitLead (actions.ts).
+  const businessName = url.searchParams.get("n") ?? undefined;
+  const city = url.searchParams.get("c") ?? undefined;
 
   if (!websiteUrl) {
     return NextResponse.json(
@@ -46,12 +51,15 @@ export async function GET(
     );
   }
 
-  // Real scanners run in parallel: PageSpeed (Website Performance) and the
-  // homepage crawl (Conversion, Online Ordering, Retention/CRM, Brand/Content).
-  // Remaining categories fall back to deterministic scoring inside the engine.
-  const [performance, crawl] = await Promise.all([
+  // Real scanners run in parallel:
+  //   - PageSpeed → Website Performance
+  //   - homepage crawl → Conversion, Online Ordering, Retention/CRM, Brand
+  //   - DataForSEO Google Business Profile → Local SEO, Reputation
+  // Categories with no real signal fall back to deterministic scoring.
+  const [performance, crawl, business] = await Promise.all([
     runPerformanceScan(websiteUrl),
     runCrawlScan(websiteUrl),
+    runBusinessProfileScan({ websiteUrl, businessName, city }),
   ]);
 
   const signals: ScannerSignals = {
@@ -59,6 +67,7 @@ export async function GET(
       ? {}
       : { website_performance: performance.signal }),
     ...crawl.signals,
+    ...business.signals,
   };
 
   const result = generateScanResult(params.id, websiteUrl, signals);
@@ -75,6 +84,12 @@ export async function GET(
         source: crawl.source, // "crawl" | "unavailable"
         error: crawl.error,
         findings: crawl.findings,
+      },
+      businessProfile: {
+        source: business.source, // "dataforseo" | "unavailable"
+        error: business.error,
+        metrics: business.metrics,
+        findings: business.findings,
       },
     },
   });

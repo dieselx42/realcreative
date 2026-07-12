@@ -53,13 +53,18 @@ export async function submitLead(
     };
   }
 
-  // The website URL is passed forward in the query string so the results page
-  // can render statelessly. This matters on serverless (e.g. Vercel) without a
-  // configured database: the fallback store lives in a single request's
-  // ephemeral filesystem, so a later request cannot read the scan back. Scoring
-  // is deterministic from the URL, so the query param is all the results page
-  // needs. When Supabase IS configured, the persisted scan is used instead.
-  const query = new URLSearchParams({ u: parsed.data.websiteUrl });
+  // Values needed to render/scan are passed forward in the query string so the
+  // results page works statelessly. This matters on serverless (e.g. Vercel)
+  // without a configured database: the fallback store lives in a single
+  // request's ephemeral filesystem, so a later request cannot read the scan
+  // back. `u` is the website URL (scoring is deterministic from it); `n`/`c`
+  // are the business name + city for the Google Business Profile lookup. When
+  // Supabase IS configured, the persisted scan supplies the URL instead.
+  const query = new URLSearchParams({
+    u: parsed.data.websiteUrl,
+    n: parsed.data.restaurantName,
+    c: parsed.data.city,
+  });
 
   // redirect() throws internally, so it must live outside the try/catch above.
   redirect(`/results/${scanId}?${query.toString()}`);

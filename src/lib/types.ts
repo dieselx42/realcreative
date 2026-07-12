@@ -98,6 +98,12 @@ export interface ScanResultMeta {
     error?: string;
     findings: Partial<Record<CategoryKey, CrawlFinding[]>>;
   };
+  businessProfile?: {
+    source: "dataforseo" | "unavailable";
+    error?: string;
+    metrics: { rating?: number; reviews?: number };
+    findings: Partial<Record<CategoryKey, CrawlFinding[]>>;
+  };
 }
 
 /** The full /api/scan response: the scored result plus diagnostic meta. */
