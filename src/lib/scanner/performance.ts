@@ -23,8 +23,12 @@ function pagespeedEndpoint(): string {
   return process.env.PAGESPEED_ENDPOINT || DEFAULT_PAGESPEED_ENDPOINT;
 }
 
-/** PageSpeed/Lighthouse can be slow; cap how long we'll wait for it. */
-const DEFAULT_TIMEOUT_MS = 20_000;
+/**
+ * PageSpeed/Lighthouse can be slow (a full audit often takes 10-25s). Allow
+ * generous headroom, but stay under the API route's maxDuration so we abort and
+ * fall back cleanly rather than letting the whole function hard-timeout.
+ */
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 export interface PerformanceScan {
   /** Lighthouse performance score, 0..1, or null when unavailable. */
