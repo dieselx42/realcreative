@@ -263,7 +263,9 @@ async function attachLeadInSupabase(
       .update({ lead_id: lead.id, restaurant_id: restaurant.id })
       .eq("id", scanId)
       .is("lead_id", null)
-      .select(SCAN_SELECT)
+      // Only the always-present columns: the returned row isn't displayed, and
+      // this must not fail on a database that hasn't run migration 0003 yet.
+      .select(SCAN_SELECT_LEGACY)
       .maybeSingle();
     if (!updateError && updated) return mapScanRow(updated);
     // updateError (e.g. pre-0003 schema) or no matching row → create below.
@@ -278,7 +280,7 @@ async function attachLeadInSupabase(
       website_url: data.websiteUrl,
       status: "pending",
     })
-    .select(SCAN_SELECT)
+    .select(SCAN_SELECT_LEGACY)
     .single();
   if (scanError) throw scanError;
 
