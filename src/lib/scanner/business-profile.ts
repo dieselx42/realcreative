@@ -378,10 +378,10 @@ async function trySearchListings(
       return unavailable("No business listings found", query);
     }
 
-    const best = pickBestListing(items, context);
+    const best = pickBestListing(items, context, Boolean(point));
     if (!best) {
-      // Candidates existed but none matched by domain or city — attributing a
-      // random same-name business's reviews would be wrong. Bail out safely.
+      // Candidates existed but none matched confidently — attributing a random
+      // same-name business's reviews would be wrong. Bail out safely.
       return unavailable("No confident business match", query);
     }
 
@@ -425,18 +425,47 @@ interface BestListing {
   matchedBy: ProfileMatch;
 }
 
+/** Significant (3+ char) tokens of a name, minus common filler. */
+const NAME_STOPWORDS = new Set([
+  "the",
+  "and",
+  "restaurant",
+  "cafe",
+  "bar",
+  "grill",
+  "kitchen",
+  "bistro",
+]);
+function nameTokens(name?: string): string[] {
+  return (name ?? "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !NAME_STOPWORDS.has(t));
+}
+
+/** Do the business name and a candidate title share a meaningful token? */
+function nameRelevant(title: string | undefined, wanted: string[]): boolean {
+  if (wanted.length === 0) return false;
+  const have = new Set(nameTokens(title));
+  return wanted.some((t) => have.has(t));
+}
+
 /**
  * Choose the candidate that is most confidently the lead's business:
- *   website domain match  >  same city  >  (reject).
- * Reviews break ties within the same tier. A name-only match is rejected — with
- * no domain or city agreement it's too likely to be a different same-name spot.
+ *   website domain match  >  same city  >  name match near the searched city.
+ * Reviews break ties within a tier. A bare name-only match is rejected UNLESS
+ * the search was geo-scoped to the city (so results are already local) and the
+ * name is relevant — this catches cases like a listing in "Miami Beach" when the
+ * lead typed "Miami", or a Google website that differs from the scanned domain.
  */
 function pickBestListing(
   items: ListingItem[],
   context: ScanContext,
+  geoScoped: boolean,
 ): BestListing | null {
   const targetHost = hostOf(context.websiteUrl);
   const city = normCity(context.city);
+  const wanted = nameTokens(context.businessName);
 
   let best: ListingItem | null = null;
   let bestScore = -1;
@@ -467,7 +496,12 @@ function pickBestListing(
     }
   }
 
-  if (!best || bestMatch === "name") return null;
+  if (!best) return null;
+  if (bestMatch === "name") {
+    // Accept a name-only hit only when the search was scoped to the city and the
+    // name genuinely matches — otherwise it's too likely a different business.
+    if (!geoScoped || !nameRelevant(best.title, wanted)) return null;
+  }
   return { item: best, matchedBy: bestMatch };
 }
 

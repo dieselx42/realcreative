@@ -37,7 +37,7 @@ function matchLabel(m?: string): string {
   if (m === "website") return "matched to your website domain";
   if (m === "name+city") return "matched by name + city";
   if (m === "panel") return "matched to your Google listing";
-  return "matched by name";
+  return "matched by name near your city";
 }
 
 type Tone = "good" | "ni" | "poor";
