@@ -325,7 +325,7 @@ async function trySearchListings(
   timeoutMs: number,
   priorQuery?: BusinessProfileQuery,
 ): Promise<BusinessProfileScan> {
-  const title = context.businessName ?? "";
+  const title = stripCityFromName(context.businessName ?? "", context.city);
   const baseQuery: BusinessProfileQuery = {
     keyword: title,
     cityResolved: priorQuery?.cityResolved ?? false,
@@ -451,6 +451,58 @@ function nameRelevant(title: string | undefined, wanted: string[]): boolean {
 }
 
 /**
+ * Drop city words from the business name so a name like "Mila Miami" searches as
+ * "Mila" — the restaurant's actual Google name — instead of surfacing an
+ * unrelated "Mila" that happens to include the city.
+ */
+function stripCityFromName(name: string, city?: string): string {
+  const cityTokens = new Set(nameTokens(city));
+  if (cityTokens.size === 0) return name;
+  const kept = name.split(/\s+/).filter((w) => {
+    const t = w.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return t.length === 0 || !cityTokens.has(t);
+  });
+  const result = kept.join(" ").trim();
+  return result.length >= 2 ? result : name;
+}
+
+// This is a restaurant tool, so a matched business must be a food establishment.
+// A same-named language school / shop / etc. is not the restaurant we want.
+const FOOD_CATEGORY_HINTS = [
+  "restaurant",
+  "food",
+  "cafe",
+  "coffee",
+  "bar",
+  "pub",
+  "bakery",
+  "bistro",
+  "diner",
+  "grill",
+  "pizz",
+  "eatery",
+  "steak",
+  "sushi",
+  "taqueria",
+  "cantina",
+  "deli",
+  "brunch",
+  "burger",
+  "bbq",
+  "barbecue",
+  "ice_cream",
+  "juice",
+  "tea",
+  "meal_",
+];
+function isFoodBusiness(item: ListingItem): boolean {
+  const cats = [item.category, ...(item.additional_categories ?? [])]
+    .filter((c): c is string => typeof c === "string")
+    .map((c) => c.toLowerCase());
+  return cats.some((c) => FOOD_CATEGORY_HINTS.some((h) => c.includes(h)));
+}
+
+/**
  * Choose the candidate that is most confidently the lead's business:
  *   website domain match  >  same city  >  name match near the searched city.
  * Reviews break ties within a tier. A bare name-only match is rejected UNLESS
@@ -472,6 +524,8 @@ function pickBestListing(
   let bestMatch: ProfileMatch = "name";
 
   for (const item of items) {
+    // Never match a non-food business (e.g. a same-named language school).
+    if (!isFoodBusiness(item)) continue;
     const host = hostOf(item.url || item.domain);
     const domainMatch = sameDomain(host, targetHost);
     const itemCity = normCity(item.address_info?.city);
@@ -540,6 +594,7 @@ interface MyBusinessResponse {
 interface ListingItem {
   title?: string;
   category?: string;
+  additional_categories?: string[];
   address?: string;
   address_info?: { city?: string; region?: string; address?: string };
   url?: string;
