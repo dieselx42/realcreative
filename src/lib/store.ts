@@ -19,7 +19,12 @@ export interface StoredScanResult {
 }
 
 /**
- * Persistence layer for leads / restaurants / scan requests.
+ * Persistence layer for scans / leads / restaurants.
+ *
+ * A scan is recorded the moment it starts (`logScan`), keyed on the id the
+ * results page uses, with no lead attached yet — so the admin sees every scan,
+ * not just the ones that convert. When a visitor completes the email gate the
+ * scan is *attached* to a freshly-created lead (`attachLeadToScan`).
  *
  * Two backends:
  *   1. Supabase (when env vars are configured) — the real store.
@@ -39,7 +44,10 @@ export interface StoredScanResult {
 
 interface StoredScan {
   scanRequest: ScanRequest;
-  lead: LeadFormData;
+  /** Set once the scan converts to a lead at the email gate. */
+  lead: LeadFormData | null;
+  /** Set once the scan is scored (fallback backend only). */
+  result?: StoredScanResult;
 }
 
 // --- JSON file fallback ----------------------------------------------------
@@ -66,20 +74,46 @@ function writeFallback(scans: Record<string, StoredScan>): void {
 
 // --- Public API ------------------------------------------------------------
 
-/**
- * Create a lead, its restaurant, and a scan request in one logical operation.
- * Returns the scan request id, which the results page is keyed on.
- */
 /** The lead data plus an optional goal from the landing quiz. */
 export type LeadInput = LeadFormData & { goal?: string | null };
 
-export async function createScanRequest(
+/** Context captured up front, at scan time, before any lead exists. */
+export interface ScanLogInput {
+  scanId: string;
+  websiteUrl: string;
+  businessName?: string | null;
+  city?: string | null;
+}
+
+/**
+ * Record a scan the moment it starts — keyed on the id the results page uses,
+ * with no lead attached yet. This gives the admin visibility into every scan
+ * and gives `saveScanResult` a row to attach the score to. Best-effort by
+ * contract: callers should not block the funnel if logging fails (e.g. the
+ * 0003 migration hasn't been applied yet).
+ */
+export async function logScan(input: ScanLogInput): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await logScanInSupabase(input);
+    return;
+  }
+  logScanInFallback(input);
+}
+
+/**
+ * Attach a captured lead to the scan started by `logScan`. If that scan row
+ * isn't found (logging was skipped, the DB predates migration 0003, or the
+ * fallback was lost), fall back to creating the lead + scan together — the
+ * pre-logging behavior — so the gate never fails to record a lead.
+ */
+export async function attachLeadToScan(
+  scanId: string | null,
   data: LeadInput,
 ): Promise<ScanRequest> {
   if (isSupabaseConfigured()) {
-    return createScanRequestInSupabase(data);
+    return attachLeadInSupabase(scanId, data);
   }
-  return createScanRequestInFallback(data);
+  return attachLeadInFallback(scanId, data);
 }
 
 export async function getScanRequest(
@@ -102,18 +136,53 @@ export async function listScanRequests(): Promise<ScanRequest[]> {
 
 // --- Fallback implementation ----------------------------------------------
 
-function createScanRequestInFallback(data: LeadInput): ScanRequest {
-  const now = new Date().toISOString();
+function logScanInFallback(input: ScanLogInput): void {
+  const scans = readFallback();
+  // Don't clobber an already-recorded scan (e.g. a results-page refresh).
+  if (scans[input.scanId]) return;
+  scans[input.scanId] = {
+    scanRequest: {
+      id: input.scanId,
+      leadId: null,
+      restaurantId: null,
+      websiteUrl: input.websiteUrl,
+      businessName: input.businessName ?? null,
+      city: input.city ?? null,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    },
+    lead: null,
+  };
+  writeFallback(scans);
+}
+
+function attachLeadInFallback(
+  scanId: string | null,
+  data: LeadInput,
+): ScanRequest {
+  const scans = readFallback();
+  const existing = scanId ? scans[scanId] : undefined;
+
+  if (existing) {
+    existing.scanRequest.leadId ??= randomUUID();
+    existing.scanRequest.restaurantId ??= randomUUID();
+    existing.scanRequest.businessName ??= data.restaurantName;
+    existing.scanRequest.city ??= data.city;
+    existing.lead = data;
+    writeFallback(scans);
+    return existing.scanRequest;
+  }
+
   const scanRequest: ScanRequest = {
-    id: randomUUID(),
+    id: scanId ?? randomUUID(),
     leadId: randomUUID(),
     restaurantId: randomUUID(),
     websiteUrl: data.websiteUrl,
+    businessName: data.restaurantName,
+    city: data.city,
     status: "pending",
-    createdAt: now,
+    createdAt: new Date().toISOString(),
   };
-
-  const scans = readFallback();
   scans[scanRequest.id] = { scanRequest, lead: data };
   writeFallback(scans);
   return scanRequest;
@@ -121,7 +190,28 @@ function createScanRequestInFallback(data: LeadInput): ScanRequest {
 
 // --- Supabase implementation ----------------------------------------------
 
-async function createScanRequestInSupabase(
+async function logScanInSupabase(input: ScanLogInput): Promise<void> {
+  const supabase = createServiceSupabaseClient();
+  // Insert with the results-page id so the score and lead attach to this row.
+  // Requires migration 0003 (nullable lead_id + business_name/city columns);
+  // if that hasn't run, this insert fails and the caller treats it as a no-op.
+  const { error } = await supabase
+    .from("scan_requests")
+    .upsert(
+      {
+        id: input.scanId,
+        website_url: input.websiteUrl,
+        business_name: input.businessName ?? null,
+        city: input.city ?? null,
+        status: "pending",
+      },
+      { onConflict: "id", ignoreDuplicates: true },
+    );
+  if (error) throw error;
+}
+
+async function attachLeadInSupabase(
+  scanId: string | null,
   data: LeadInput,
 ): Promise<ScanRequest> {
   const supabase = createServiceSupabaseClient();
@@ -166,15 +256,29 @@ async function createScanRequestInSupabase(
     .single();
   if (restaurantError) throw restaurantError;
 
+  // Attach to the scan started by logScan, if it's there.
+  if (scanId) {
+    const { data: updated, error: updateError } = await supabase
+      .from("scan_requests")
+      .update({ lead_id: lead.id, restaurant_id: restaurant.id })
+      .eq("id", scanId)
+      .is("lead_id", null)
+      .select(SCAN_SELECT)
+      .maybeSingle();
+    if (!updateError && updated) return mapScanRow(updated);
+    // updateError (e.g. pre-0003 schema) or no matching row → create below.
+  }
+
   const { data: scan, error: scanError } = await supabase
     .from("scan_requests")
     .insert({
+      id: scanId ?? undefined,
       lead_id: lead.id,
       restaurant_id: restaurant.id,
       website_url: data.websiteUrl,
       status: "pending",
     })
-    .select("id, lead_id, restaurant_id, website_url, status, created_at")
+    .select(SCAN_SELECT)
     .single();
   if (scanError) throw scanError;
 
@@ -183,6 +287,13 @@ async function createScanRequestInSupabase(
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Columns the app reads. business_name/city arrive with migration 0003. */
+const SCAN_SELECT =
+  "id, lead_id, restaurant_id, website_url, business_name, city, status, created_at";
+/** Pre-0003 fallback: the columns that have always existed. */
+const SCAN_SELECT_LEGACY =
+  "id, lead_id, restaurant_id, website_url, status, created_at";
 
 async function getScanRequestFromSupabase(
   id: string,
@@ -193,31 +304,65 @@ async function getScanRequestFromSupabase(
   if (!UUID_RE.test(id)) return null;
 
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
+  const primary = await supabase
     .from("scan_requests")
-    .select("id, lead_id, restaurant_id, website_url, status, created_at")
+    .select(SCAN_SELECT)
     .eq("id", id)
     .maybeSingle();
-  if (error) throw error;
-  return data ? mapScanRow(data) : null;
+
+  let row = primary.data as ScanRow | null;
+  if (primary.error) {
+    if (!isMissingColumn(primary.error)) throw primary.error;
+    const legacy = await supabase
+      .from("scan_requests")
+      .select(SCAN_SELECT_LEGACY)
+      .eq("id", id)
+      .maybeSingle();
+    if (legacy.error) throw legacy.error;
+    row = legacy.data as ScanRow | null;
+  }
+  return row ? mapScanRow(row) : null;
 }
 
 async function listScanRequestsFromSupabase(): Promise<ScanRequest[]> {
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase
+  const primary = await supabase
     .from("scan_requests")
-    .select("id, lead_id, restaurant_id, website_url, status, created_at")
+    .select(SCAN_SELECT)
     .order("created_at", { ascending: false })
     .limit(200);
-  if (error) throw error;
-  return (data ?? []).map(mapScanRow);
+
+  let rows = primary.data as ScanRow[] | null;
+  // Tolerate a database that hasn't run migration 0003 yet (e.g. code deployed
+  // before the migration): retry without the new columns instead of erroring.
+  if (primary.error) {
+    if (!isMissingColumn(primary.error)) throw primary.error;
+    const legacy = await supabase
+      .from("scan_requests")
+      .select(SCAN_SELECT_LEGACY)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (legacy.error) throw legacy.error;
+    rows = legacy.data as ScanRow[] | null;
+  }
+  return (rows ?? []).map(mapScanRow);
+}
+
+/** Postgres "undefined column" (42703) — the migration hasn't been applied. */
+function isMissingColumn(error: { code?: string; message?: string }): boolean {
+  return (
+    error.code === "42703" ||
+    /column .*(business_name|city).* does not exist/i.test(error.message ?? "")
+  );
 }
 
 interface ScanRow {
   id: string;
-  lead_id: string;
-  restaurant_id: string;
+  lead_id: string | null;
+  restaurant_id: string | null;
   website_url: string;
+  business_name?: string | null;
+  city?: string | null;
   status: ScanRequest["status"];
   created_at: string;
 }
@@ -225,29 +370,39 @@ interface ScanRow {
 function mapScanRow(row: ScanRow): ScanRequest {
   return {
     id: row.id,
-    leadId: row.lead_id,
-    restaurantId: row.restaurant_id,
+    leadId: row.lead_id ?? null,
+    restaurantId: row.restaurant_id ?? null,
     websiteUrl: row.website_url,
+    businessName: row.business_name ?? null,
+    city: row.city ?? null,
     status: row.status,
     createdAt: row.created_at,
   };
 }
 
-// --- Scan results (used by the Trigger.dev background-job flow) -------------
-// These require Supabase — the background task (running on Trigger.dev) and the
-// results page (running on Vercel) are different processes, so they can only
-// share a real database, not the local JSON-file fallback. The scored result +
-// meta are stored as a JSON blob in scan_results.raw.
+// --- Scan results ----------------------------------------------------------
+// On Supabase the background task (Trigger.dev) and the results page (Vercel)
+// are different processes, so they share the score via the database. Locally
+// (no Supabase) they run in one process, so the JSON-file fallback is enough.
 
 /**
  * Persist a completed scan result and mark the scan request completed.
- * No-op (returns false) when Supabase is not configured.
+ * Works against Supabase, or the JSON-file fallback for local development.
  */
 export async function saveScanResult(
   scanRequestId: string,
   stored: StoredScanResult,
 ): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false;
+  if (!isSupabaseConfigured()) {
+    const scans = readFallback();
+    const entry = scans[scanRequestId];
+    if (!entry) return false;
+    entry.result = stored;
+    entry.scanRequest.status = "completed";
+    writeFallback(scans);
+    return true;
+  }
+
   const supabase = createServiceSupabaseClient();
 
   const { error: resultError } = await supabase.from("scan_results").upsert(
@@ -274,7 +429,10 @@ export async function saveScanResult(
 export async function getStoredScanResult(
   scanRequestId: string,
 ): Promise<StoredScanResult | null> {
-  if (!isSupabaseConfigured() || !UUID_RE.test(scanRequestId)) return null;
+  if (!isSupabaseConfigured()) {
+    return readFallback()[scanRequestId]?.result ?? null;
+  }
+  if (!UUID_RE.test(scanRequestId)) return null;
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("scan_results")

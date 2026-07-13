@@ -22,6 +22,11 @@ export default async function ResultsPage({
     notFound();
   }
 
+  // Prefer the query string (fresh scan), fall back to the stored scan context
+  // so links from the admin (which carry no query params) still scan correctly.
+  const businessName = searchParams.n ?? scanRequest?.businessName ?? undefined;
+  const city = searchParams.c ?? scanRequest?.city ?? undefined;
+
   // The score is fetched client-side from /api/scan/[id] so the (potentially
   // slow) scanner calls run behind the scan animation instead of blocking this
   // render. Business name + city are forwarded for the Business Profile lookup.
@@ -29,8 +34,8 @@ export default async function ResultsPage({
     <ResultsView
       scanId={params.id}
       websiteUrl={websiteUrl}
-      businessName={searchParams.n}
-      city={searchParams.c}
+      businessName={businessName}
+      city={city}
       goal={searchParams.g}
     />
   );

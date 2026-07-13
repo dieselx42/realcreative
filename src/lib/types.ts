@@ -38,9 +38,14 @@ export interface Restaurant {
 
 export interface ScanRequest {
   id: string;
-  leadId: string;
-  restaurantId: string;
+  /** Null until the scan converts to a lead at the email gate. */
+  leadId: string | null;
+  /** Null until the scan converts to a lead at the email gate. */
+  restaurantId: string | null;
   websiteUrl: string;
+  /** Scan context captured up front (before a lead exists), for the admin. */
+  businessName: string | null;
+  city: string | null;
   status: ScanStatus;
   createdAt: string;
 }

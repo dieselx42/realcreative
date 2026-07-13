@@ -36,7 +36,10 @@ const websiteUrlSchema = z
   )
   .pipe(z.string().url("Enter a valid website URL"));
 
-const goalSchema = z.enum(goalValues).optional().or(z.literal(""));
+// Accept the goal being absent in several shapes: a missing FormData field
+// reads back as `null` (the goal quiz is optional and its hidden input isn't
+// always rendered), an empty string, or simply omitted.
+const goalSchema = z.enum(goalValues).nullish().or(z.literal(""));
 
 /**
  * Validation schema for the lead / scan request form. Used by both the client

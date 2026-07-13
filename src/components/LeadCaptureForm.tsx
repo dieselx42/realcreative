@@ -36,6 +36,8 @@ function Field({ label, name, error, children }: FieldProps) {
 }
 
 export interface LeadCaptureContext {
+  /** The scan this lead is being captured against (started in step 1). */
+  scanId: string;
   restaurantName: string;
   websiteUrl: string;
   city: string;
@@ -68,6 +70,7 @@ export function LeadCaptureForm({
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <input type="hidden" name="scanId" value={context.scanId} />
       <input type="hidden" name="restaurantName" value={context.restaurantName} />
       <input type="hidden" name="websiteUrl" value={context.websiteUrl} />
       <input type="hidden" name="city" value={context.city} />

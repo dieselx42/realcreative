@@ -692,6 +692,7 @@ export function ResultsView({
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
                 <LeadCaptureForm
                   context={{
+                    scanId,
                     restaurantName: businessName ?? "",
                     websiteUrl,
                     city: city ?? "",

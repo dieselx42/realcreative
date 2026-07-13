@@ -29,13 +29,28 @@ export default async function AdminPage() {
           deploying.
         </div>
 
+        {scans.length > 0 ? (
+          <div className="mb-4 flex gap-6 text-sm text-ink-soft">
+            <span>
+              <span className="font-semibold text-ink">{scans.length}</span>{" "}
+              {scans.length === 1 ? "scan" : "scans"}
+            </span>
+            <span>
+              <span className="font-semibold text-ink">
+                {scans.filter((s) => s.leadId).length}
+              </span>{" "}
+              lead{scans.filter((s) => s.leadId).length === 1 ? "" : "s"} captured
+            </span>
+          </div>
+        ) : null}
+
         {scans.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-ink-muted">
-            No scan requests yet. Submit the form on the{" "}
+            No scans yet. Run one from the{" "}
             <Link href="/" className="font-medium text-brand-600 underline">
               landing page
             </Link>{" "}
-            to create one.
+            and it&apos;ll show up here.
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -43,9 +58,10 @@ export default async function AdminPage() {
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Created</th>
+                  <th className="px-4 py-3 font-semibold">Restaurant</th>
                   <th className="px-4 py-3 font-semibold">Website</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Scan ID</th>
+                  <th className="px-4 py-3 font-semibold">Lead</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -55,14 +71,30 @@ export default async function AdminPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-ink-soft">
                       {new Date(scan.createdAt).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-ink">{scan.websiteUrl}</td>
+                    <td className="px-4 py-3 text-ink">
+                      {scan.businessName ?? (
+                        <span className="text-ink-muted">—</span>
+                      )}
+                      {scan.city ? (
+                        <span className="block text-xs text-ink-muted">
+                          {scan.city}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-ink-soft">{scan.websiteUrl}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium capitalize text-ink-soft">
                         {scan.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-ink-muted">
-                      {scan.id.slice(0, 8)}…
+                    <td className="px-4 py-3">
+                      {scan.leadId ? (
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                          Lead captured
+                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-muted">Anonymous</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link
