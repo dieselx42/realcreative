@@ -3,12 +3,30 @@ import { ScanStartForm } from "@/components/ScanStartForm";
 import { BRAND } from "@/lib/brand";
 import { SCORE_CATEGORIES } from "@/lib/scoring/categories";
 
+const HERO_BENEFITS = [
+  {
+    icon: "🏆",
+    title: "See how you rank against nearby restaurants",
+    desc: "Your Google rating and reviews, benchmarked against local competitors.",
+  },
+  {
+    icon: "💸",
+    title: "See what the gaps are costing you",
+    desc: "An estimate of the monthly revenue you're leaving on the table.",
+  },
+  {
+    icon: "✅",
+    title: "Get your action plan",
+    desc: "Five AI-tailored fixes for your restaurant, ranked by impact.",
+  },
+];
+
 export default function HomePage() {
   return (
     <main className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="container-page flex h-16 items-center justify-between">
-          <Logo />
+          <Logo compact />
           <a href="#score" className="btn-secondary hidden sm:inline-flex">
             Get my score
           </a>
@@ -29,29 +47,31 @@ export default function HomePage() {
               SEO, reviews, and how you stack up against nearby restaurants.
             </p>
 
-            <ul className="mt-8 grid gap-3 sm:grid-cols-2">
-              {SCORE_CATEGORIES.map((category) => (
-                <li
-                  key={category.key}
-                  className="flex items-start gap-2 text-sm text-ink-soft"
-                >
+            <ul className="mt-8 space-y-4">
+              {HERO_BENEFITS.map((benefit) => (
+                <li key={benefit.title} className="flex items-start gap-3">
                   <span
                     aria-hidden
-                    className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-brand-100 text-brand-700"
+                    className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-brand-100 text-base"
                   >
-                    ✓
+                    {benefit.icon}
                   </span>
                   <span>
-                    <span className="font-medium text-ink">
-                      {category.label}
-                    </span>{" "}
-                    <span className="text-ink-muted">
-                      ({category.maxPoints} pts)
+                    <span className="font-semibold text-ink">
+                      {benefit.title}
+                    </span>
+                    <span className="block text-sm text-ink-muted">
+                      {benefit.desc}
                     </span>
                   </span>
                 </li>
               ))}
             </ul>
+
+            <p className="mt-6 text-sm text-ink-muted">
+              <span className="font-medium text-ink-soft">What we check:</span>{" "}
+              {SCORE_CATEGORIES.map((c) => c.label).join(" · ")}
+            </p>
           </div>
 
           <div id="score" className="lg:pl-6">

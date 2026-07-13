@@ -498,7 +498,7 @@ export function ResultsView({
       <header className="border-b border-slate-200 bg-white print:hidden">
         <div className="container-page flex h-16 items-center justify-between">
           <a href="/">
-            <Logo />
+            <Logo compact />
           </a>
           <div className="flex items-center gap-4">
             <span className="hidden text-sm text-ink-muted sm:inline">

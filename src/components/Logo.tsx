@@ -8,12 +8,19 @@ import { BRAND } from "@/lib/brand";
 export function Logo({
   className = "h-8",
   variant = "light",
+  compact = false,
 }: {
   className?: string;
   variant?: "light" | "dark";
+  /** Tighter lockup for headers/nav. */
+  compact?: boolean;
 }) {
-  const src =
-    variant === "dark"
+  const dark = variant === "dark";
+  const src = compact
+    ? dark
+      ? "/brand/logo-compact-dark.svg"
+      : "/brand/logo-compact.svg"
+    : dark
       ? "/brand/logo-horizontal-dark.svg"
       : "/brand/logo-horizontal.svg";
   return (
