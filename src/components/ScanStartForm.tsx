@@ -12,7 +12,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" className="btn-primary w-full" disabled={pending}>
-      {pending ? "Scoring your website…" : "Get my Growth Score"}
+      {pending ? "Scoring your website…" : "Get my score"}
     </button>
   );
 }

@@ -1,4 +1,6 @@
+import { Logo } from "@/components/Logo";
 import { ScanStartForm } from "@/components/ScanStartForm";
+import { BRAND } from "@/lib/brand";
 import { SCORE_CATEGORIES } from "@/lib/scoring/categories";
 
 export default function HomePage() {
@@ -6,9 +8,7 @@ export default function HomePage() {
     <main className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="container-page flex h-16 items-center justify-between">
-          <span className="text-lg font-bold text-ink">
-            Restaurant<span className="text-brand-600">Growth</span>Score
-          </span>
+          <Logo />
           <a href="#score" className="btn-secondary hidden sm:inline-flex">
             Get my score
           </a>
@@ -25,8 +25,8 @@ export default function HomePage() {
               Find out if your restaurant website is costing you orders.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-ink-soft">
-              Get a Restaurant Growth Score based on your website, online
-              ordering, SEO, reviews, and customer capture system.
+              Get your {BRAND.scoreName} based on your website, online ordering,
+              SEO, reviews, and how you stack up against nearby restaurants.
             </p>
 
             <ul className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -74,7 +74,7 @@ export default function HomePage() {
       <footer className="border-t border-slate-200 bg-white">
         <div className="container-page flex flex-col items-center justify-between gap-2 py-8 text-sm text-ink-muted sm:flex-row">
           <span>
-            © {new Date().getFullYear()} Restaurant Growth Score
+            © {new Date().getFullYear()} {BRAND.name}
           </span>
           <a href="/admin" className="hover:text-ink">
             Admin

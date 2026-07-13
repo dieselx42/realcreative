@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { LeadCaptureForm } from "@/components/LeadCaptureForm";
+import { Logo } from "@/components/Logo";
 import { ScoreDial } from "@/components/ScoreDial";
+import { BRAND } from "@/lib/brand";
 import { GOAL_OPTIONS } from "@/lib/validation";
 import type {
   CrawlFinding,
@@ -495,8 +497,8 @@ export function ResultsView({
     <main className="min-h-screen bg-slate-50 pb-16">
       <header className="border-b border-slate-200 bg-white print:hidden">
         <div className="container-page flex h-16 items-center justify-between">
-          <a href="/" className="text-lg font-bold text-ink">
-            Restaurant<span className="text-brand-600">Growth</span>Score
+          <a href="/">
+            <Logo />
           </a>
           <div className="flex items-center gap-4">
             <span className="hidden text-sm text-ink-muted sm:inline">
@@ -517,7 +519,7 @@ export function ResultsView({
         {/* Print-only header, since the on-screen nav is hidden in the PDF. */}
         <div className="mb-4 hidden items-baseline justify-between border-b border-slate-200 pb-2 print:flex">
           <span className="text-base font-bold text-ink">
-            Restaurant Growth Score — {businessName ?? websiteUrl}
+            {BRAND.name} — {businessName ?? websiteUrl}
           </span>
           <span className="text-xs text-ink-muted">{websiteUrl}</span>
         </div>
@@ -526,7 +528,7 @@ export function ResultsView({
           <ScoreDial score={result.totalScore} max={result.maxScore} />
           <div>
             <h1 className="text-2xl font-extrabold text-ink sm:text-3xl">
-              Your Restaurant Growth Score
+              Your {BRAND.scoreName}
             </h1>
             <p className="mt-2 max-w-xl text-ink-soft">
               A preview score based on {websiteUrl}. See how you compare to nearby

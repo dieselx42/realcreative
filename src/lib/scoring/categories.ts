@@ -1,5 +1,5 @@
 /**
- * Canonical definition of the seven Restaurant Growth Score categories.
+ * Canonical definition of the seven My Restaurant Score categories.
  *
  * The `maxPoints` values are the source of truth for the total score and MUST
  * sum to 100. They are referenced by the scoring engine, the results page, and

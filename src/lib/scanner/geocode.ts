@@ -51,7 +51,7 @@ export async function geocodeCity(
       headers: {
         "user-agent":
           process.env.GEOCODE_USER_AGENT ||
-          "RestaurantGrowthScore/1.0 (+https://github.com/dieselx42/realcreative)",
+          "MyRestaurantScore/1.0 (+https://myrestaurantscore.com)",
         accept: "application/json",
       },
       signal: controller.signal,

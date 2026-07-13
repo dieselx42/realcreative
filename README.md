@@ -1,9 +1,12 @@
-# Restaurant Growth Score
+# My Restaurant Score
 
-A lead-generation website scoring tool for restaurants. A restaurant owner
-enters their website URL and contact details; the app scores the site out of
-100, breaks the score into categories, generates recommendations, and stores
-the lead + scan for follow-up.
+A lead-generation website scoring tool for restaurants (myrestaurantscore.com).
+A restaurant owner enters their website URL; the app scores the site out of 100,
+shows how they compare to nearby restaurants and what the gaps are costing them,
+generates AI recommendations, and captures the lead behind the full report.
+
+> The product name lives in `src/lib/brand.ts` — change it there and it updates
+> across the app, emails, and metadata.
 
 This repository is the **initial project foundation** (MVP scaffold). Scoring is
 deterministic placeholder logic today — the real scanners, external APIs, and AI
