@@ -30,6 +30,15 @@ const SCAN_STEPS = [
 ];
 
 const CALENDLY_URL = process.env.NEXT_PUBLIC_CALENDLY_URL;
+const SCREENSHOT_BASE =
+  process.env.NEXT_PUBLIC_SCREENSHOT_BASE || "https://image.thum.io/get/width/1000/";
+
+function matchLabel(m?: string): string {
+  if (m === "website") return "matched to your website domain";
+  if (m === "name+city") return "matched by name + city";
+  if (m === "panel") return "matched to your Google listing";
+  return "matched by name";
+}
 
 type Tone = "good" | "ni" | "poor";
 
@@ -141,6 +150,76 @@ function LiveBadge({
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
       {label}
     </span>
+  );
+}
+
+/** Confirms what we scanned: a homepage screenshot + the matched Google listing. */
+function ScannedTargetPanel({
+  websiteUrl,
+  businessName,
+  business,
+}: {
+  websiteUrl: string;
+  businessName?: string;
+  business?: ScanResultMeta["businessProfile"];
+}) {
+  const [imgOk, setImgOk] = useState(true);
+  const matched = business?.source === "dataforseo" ? business : undefined;
+
+  return (
+    <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-ink">What we scanned</h2>
+      <div className="mt-4 grid gap-5 sm:grid-cols-[220px,1fr] sm:items-center">
+        {imgOk ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`${SCREENSHOT_BASE}${websiteUrl}`}
+            alt={`Screenshot of ${websiteUrl}`}
+            className="w-full rounded-lg border border-slate-200"
+            loading="lazy"
+            onError={() => setImgOk(false)}
+          />
+        ) : (
+          <div className="flex aspect-[5/4] w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-xs text-ink-muted">
+            {websiteUrl}
+          </div>
+        )}
+        <div className="text-sm">
+          <div className="font-semibold text-ink">
+            {businessName ?? "Your restaurant"}
+          </div>
+          <a
+            href={websiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-brand-600 hover:underline"
+          >
+            {websiteUrl}
+          </a>
+          {matched ? (
+            <p className="mt-3 text-ink-soft">
+              Google listing{" "}
+              <span className="font-semibold text-ink">
+                {typeof matched.metrics.rating === "number"
+                  ? `${matched.metrics.rating.toFixed(1)}★`
+                  : "—"}
+              </span>
+              {matched.metrics.reviews != null
+                ? ` · ${matched.metrics.reviews.toLocaleString()} reviews`
+                : ""}{" "}
+              <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                {matchLabel(matched.query?.matchedBy)}
+              </span>
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-ink-muted">
+            Scored the wrong spot? Re-run with your full{" "}
+            <span className="font-medium">City, State</span> so we match the right
+            Google listing.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -414,18 +493,35 @@ export function ResultsView({
 
   return (
     <main className="min-h-screen bg-slate-50 pb-16">
-      <header className="border-b border-slate-200 bg-white">
+      <header className="border-b border-slate-200 bg-white print:hidden">
         <div className="container-page flex h-16 items-center justify-between">
           <a href="/" className="text-lg font-bold text-ink">
             Restaurant<span className="text-brand-600">Growth</span>Score
           </a>
-          <span className="hidden text-sm text-ink-muted sm:inline">
-            Report for {websiteUrl}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="hidden text-sm text-ink-muted sm:inline">
+              Report for {websiteUrl}
+            </span>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="btn-secondary hidden sm:inline-flex"
+            >
+              Print / Save PDF
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="container-page pt-10">
+        {/* Print-only header, since the on-screen nav is hidden in the PDF. */}
+        <div className="mb-4 hidden items-baseline justify-between border-b border-slate-200 pb-2 print:flex">
+          <span className="text-base font-bold text-ink">
+            Restaurant Growth Score — {businessName ?? websiteUrl}
+          </span>
+          <span className="text-xs text-ink-muted">{websiteUrl}</span>
+        </div>
+
         <div className="grid gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10 lg:grid-cols-[auto,1fr] lg:items-center">
           <ScoreDial score={result.totalScore} max={result.maxScore} />
           <div>
@@ -439,6 +535,13 @@ export function ResultsView({
             </p>
           </div>
         </div>
+
+        {/* What we scanned — screenshot + matched Google listing */}
+        <ScannedTargetPanel
+          websiteUrl={websiteUrl}
+          businessName={businessName}
+          business={meta?.businessProfile}
+        />
 
         {/* Competitor benchmarking */}
         {meta?.competitors ? (
@@ -555,7 +658,7 @@ export function ResultsView({
               ))}
             </ol>
           ) : (
-            <div className="mt-4 grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-2 lg:items-center">
+            <div className="mt-4 grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-2 lg:items-center print:hidden">
               <div>
                 <div
                   aria-hidden
@@ -600,7 +703,7 @@ export function ResultsView({
         </section>
 
         {/* CTA */}
-        <section className="mt-10 rounded-2xl bg-ink px-6 py-10 text-center sm:px-10">
+        <section className="mt-10 rounded-2xl bg-ink px-6 py-10 text-center sm:px-10 print:hidden">
           <h2 className="text-2xl font-extrabold text-white">
             Ready to turn this score into more orders?
           </h2>

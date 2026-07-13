@@ -118,6 +118,12 @@ export interface ScanResultMeta {
       candidatesConsidered?: number;
     };
   };
+  reviews?: {
+    responseRate?: number;
+    responded?: number;
+    sampled?: number;
+    mostRecentDaysAgo?: number;
+  };
   competitors?: {
     competitors: { name: string; rating?: number; reviews?: number; area?: string }[];
     avgRating?: number;

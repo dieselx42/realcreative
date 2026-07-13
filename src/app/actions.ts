@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 
 import { redirect } from "next/navigation";
 
+import { sendReportEmail } from "@/lib/email";
 import { createScanRequest } from "@/lib/store";
 import {
   leadCaptureSchema,
@@ -90,6 +91,22 @@ export async function captureLead(
       ok: false,
       formError: "Something went wrong. Please try again in a moment.",
     };
+  }
+
+  // Best-effort: email the report link. Never block unlocking on delivery.
+  const reportUrl = formData.get("reportUrl");
+  try {
+    const result = await sendReportEmail({
+      to: parsed.data.email,
+      contactName: parsed.data.contactName,
+      restaurantName: parsed.data.restaurantName,
+      reportUrl: typeof reportUrl === "string" ? reportUrl : undefined,
+    });
+    if (!result.ok && result.error !== "RESEND_API_KEY not set") {
+      console.warn("Report email not sent:", result.error);
+    }
+  } catch (error) {
+    console.warn("Report email threw:", error);
   }
 
   return { ok: true };

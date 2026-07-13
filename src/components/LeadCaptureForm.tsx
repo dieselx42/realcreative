@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { captureLead, type CaptureLeadState } from "@/app/actions";
@@ -56,6 +56,11 @@ export function LeadCaptureForm({
 }) {
   const [state, formAction] = useFormState(captureLead, initialState);
   const errors = state.errors ?? {};
+  const [reportUrl, setReportUrl] = useState("");
+
+  useEffect(() => {
+    setReportUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     if (state.ok) onUnlock();
@@ -69,6 +74,7 @@ export function LeadCaptureForm({
       {context.goal ? (
         <input type="hidden" name="goal" value={context.goal} />
       ) : null}
+      <input type="hidden" name="reportUrl" value={reportUrl} />
 
       {state.formError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

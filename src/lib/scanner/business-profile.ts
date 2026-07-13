@@ -66,8 +66,8 @@ export interface BusinessProfileScan {
   source: "dataforseo" | "unavailable";
   error?: string;
   query?: BusinessProfileQuery;
-  /** The matched business's identity, used to find same-category competitors. */
-  matched?: { category?: string; title?: string };
+  /** The matched business's identity, used for competitors + reviews lookups. */
+  matched?: { category?: string; title?: string; cid?: string; placeId?: string };
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -305,7 +305,7 @@ async function tryMyBusinessInfo(
     return {
       ...buildScan(fields),
       query: { ...query, matchedBy: "panel" },
-      matched: { category: item.category },
+      matched: { category: item.category, cid: item.cid, placeId: item.place_id },
     };
   } catch (error) {
     return unavailable(
@@ -403,7 +403,12 @@ async function trySearchListings(
     return {
       ...buildScan(fields),
       query: { ...query, matchedBy: best.matchedBy },
-      matched: { category: item.category, title: item.title },
+      matched: {
+        category: item.category,
+        title: item.title,
+        cid: item.cid,
+        placeId: item.place_id,
+      },
     };
   } catch (error) {
     return unavailable(
@@ -486,6 +491,8 @@ interface MyBusinessItem {
   is_claimed?: boolean;
   total_photos?: number;
   work_time?: unknown;
+  cid?: string;
+  place_id?: string;
 }
 
 interface MyBusinessResponse {
@@ -508,6 +515,8 @@ interface ListingItem {
   is_claimed?: boolean;
   total_photos?: number;
   work_time?: unknown;
+  cid?: string;
+  place_id?: string;
 }
 
 interface ListingsResponse {

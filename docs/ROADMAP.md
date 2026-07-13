@@ -112,15 +112,20 @@ Effort is rough: **S** = <½ day, **M** = 1–2 days, **L** = 3+ days.
   major directories (DataForSEO business listings). *Deferred.*
 
 ### Phase 3 — The deliverable (turn a scan into a leave-behind)
-- [ ] **Confirm-your-business step** *(M)* — show the matched candidates and let
-  the user pick, so reputation data is never attributed to the wrong location
-  (builds on the domain-disambiguation we already have).
-- [ ] **Site screenshot in the report** *(M)* — Playwright screenshot (Chromium
-  already available) of their homepage.
-- [ ] **Emailed PDF report** *(L)* — branded PDF with score, screenshot,
-  competitor comparison, and a prioritized roadmap (impact × effort).
+- [x] **Confirm-your-business step** *(M)* — "What we scanned" panel shows the
+  homepage + the matched Google listing (rating/reviews + how it matched), so the
+  user can confirm the right location was scored.
+- [x] **Site screenshot in the report** *(M)* — homepage screenshot via a service
+  (thum.io by default, `NEXT_PUBLIC_SCREENSHOT_BASE`), no serverless Chromium.
+- [x] **Emailed report + printable PDF** *(L)* — "Print / Save PDF" button with
+  print styles (nav/CTA/gate hidden), and an emailed report link on lead capture
+  via Resend (`RESEND_API_KEY`, best-effort). *A fully branded server-rendered
+  PDF is a future upgrade; browser print covers the leave-behind for now.*
 - [ ] **"What good looks like" examples** *(S)* — per-category exemplars so the
-  gap is concrete.
+  gap is concrete. *Deferred.*
+
+Also completed from Phase 2: **review-response rate + recency** (`reviews.ts`) —
+async DataForSEO reviews, best-effort inline, reliable via Trigger.dev.
 
 ### Phase 4 — Backend & ops (your side)
 - [ ] **Admin lead dashboard** *(L)* — replace the placeholder; list leads with

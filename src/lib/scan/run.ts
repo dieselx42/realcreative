@@ -8,6 +8,7 @@ import { runBusinessProfileScan } from "@/lib/scanner/business-profile";
 import { runCompetitorScan } from "@/lib/scanner/competitors";
 import { runCrawlScan } from "@/lib/scanner/crawl";
 import { runPerformanceScan } from "@/lib/scanner/performance";
+import { runReviewsInsights, type ReviewsInsights } from "@/lib/scanner/reviews";
 import { generateScanResult } from "@/lib/scoring/engine";
 import { computeRevenueImpact } from "@/lib/scoring/revenue";
 import type { CategoryKey } from "@/lib/scoring/categories";
@@ -70,16 +71,48 @@ export async function runScanPipeline(
 
   const result = generateScanResult(scanId, websiteUrl, signals);
 
-  // Competitor benchmarking depends on the matched restaurant's category, so it
-  // runs after the business-profile scan (not in the parallel batch above).
-  const competitor = await runCompetitorScan({
-    city,
-    category: business.matched?.category,
-    rating: business.metrics.rating,
-    reviews: business.metrics.reviews,
-    businessName,
-    websiteUrl,
-  });
+  // Competitor benchmarking and the reviews lookup both depend on the matched
+  // business, so they run after the business-profile scan (in parallel).
+  const reviewsBudgetMs = Number(process.env.REVIEWS_BUDGET_MS) || undefined;
+  const [competitor, reviews] = await Promise.all([
+    runCompetitorScan({
+      city,
+      category: business.matched?.category,
+      rating: business.metrics.rating,
+      reviews: business.metrics.reviews,
+      businessName,
+      websiteUrl,
+    }),
+    business.matched?.cid || business.matched?.placeId
+      ? runReviewsInsights({
+          cid: business.matched?.cid,
+          placeId: business.matched?.placeId,
+          budgetMs: reviewsBudgetMs,
+        })
+      : Promise.resolve<ReviewsInsights>({
+          source: "unavailable",
+          error: "No matched business to look up reviews",
+        }),
+  ]);
+
+  // Surface review-response + recency as reputation findings when available.
+  if (reviews.source === "dataforseo" && business.findings.reputation) {
+    if (typeof reviews.responseRate === "number") {
+      business.findings.reputation.push({
+        label: `Responds to ${Math.round(reviews.responseRate * 100)}% of reviews`,
+        ok: reviews.responseRate >= 0.3,
+      });
+    }
+    if (typeof reviews.mostRecentDaysAgo === "number") {
+      business.findings.reputation.push({
+        label:
+          reviews.mostRecentDaysAgo <= 30
+            ? "Recent reviews"
+            : `Last review ${reviews.mostRecentDaysAgo}d ago`,
+        ok: reviews.mostRecentDaysAgo <= 30,
+      });
+    }
+  }
 
   // Revenue framing is a pure calc from what the scanners already found.
   const revenue = computeRevenueImpact({
@@ -111,6 +144,17 @@ export async function runScanPipeline(
           metrics: business.metrics,
           findings: business.findings,
         },
+        reviewEngagement:
+          reviews.source === "dataforseo"
+            ? {
+                responseRatePct:
+                  typeof reviews.responseRate === "number"
+                    ? Math.round(reviews.responseRate * 100)
+                    : undefined,
+                respondedOfSampled: `${reviews.responded ?? 0}/${reviews.sampled ?? 0}`,
+                mostRecentDaysAgo: reviews.mostRecentDaysAgo,
+              }
+            : undefined,
         localCompetitors:
           competitor.source === "dataforseo"
             ? {
@@ -161,6 +205,15 @@ export async function runScanPipeline(
       findings: business.findings,
       query: business.query,
     },
+    reviews:
+      reviews.source === "dataforseo"
+        ? {
+            responseRate: reviews.responseRate,
+            responded: reviews.responded,
+            sampled: reviews.sampled,
+            mostRecentDaysAgo: reviews.mostRecentDaysAgo,
+          }
+        : undefined,
     competitors:
       competitor.source === "dataforseo"
         ? {
